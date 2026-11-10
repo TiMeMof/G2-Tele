@@ -1,0 +1,114 @@
+{
+  "host/run_drawer.py": {
+    "sha256": "896866c002cd89882d7fbf8eb2dfc04b0926ccdc52d09c0dd195bb3606310586",
+    "bytes": 18184
+  },
+  "host/web_config.py": {
+    "sha256": "612e31cd39e0adc8d2282bd6bf9f71aee4538c8db802701f4fba22e5d49cdf4e",
+    "bytes": 2280
+  },
+  "host/record_browser.py": {
+    "sha256": "12e767c2abddebbb77024551204b2de194d24017eefe8b47001f889a48a55e77",
+    "bytes": 15427
+  },
+  "host/washer_tasks.py": {
+    "sha256": "6ebab44b470a5b2791de9aae6e0bb79a7eb1a1ca736f6a8946332ad38e9f73d8",
+    "bytes": 5700
+  },
+  "host/run_washer.py": {
+    "sha256": "31ce96681ebee12ec4d0c76de981a5e0afaf74ddf03771136f01d661dec3f0f7",
+    "bytes": 17182
+  },
+  "host/run_place_masked.py": {
+    "sha256": "b81ef4b693650b92fa48186f68e18084a3528b5a1636215dd062824d7da285c4",
+    "bytes": 52363
+  },
+  "host/takeover_runtime.py": {
+    "sha256": "8124e78b227ef3bb4486e74c9ff9d5fe340f0e427c47e99419cc48add285d168",
+    "bytes": 9179
+  },
+  "host/data_browser.js": {
+    "sha256": "1949eaf3e0e605b0af78f1fe1fc9dfb28f9f8c339b96fac92a186641b72aae18",
+    "bytes": 17203
+  },
+  "host/run_pick_synchronized.py": {
+    "sha256": "81fb60db8f370b81e1b2e96f7d0f9e9a703aa013457bcdd7dfe75396f66c3073",
+    "bytes": 17587
+  },
+  "host/run_pick_rtc.py": {
+    "sha256": "d2c2c8083a596e46ff3868bc3b93766aeca512f2946dc21f744e938c0f597d9a",
+    "bytes": 31558
+  },
+  "host/run_pick_async.py": {
+    "sha256": "a052c3fa701844eecc42dbd6dd6c5ec6f980abf2af13497e5d3bb9a7c799e351",
+    "bytes": 17707
+  },
+  "host/restore.py": {
+    "sha256": "8a43f9323a1fb9e10c37d3c065c0982b7f2491143a7c8a435b2d15f692f6bd04",
+    "bytes": 4533
+  },
+  "host/run_pick_timing.py": {
+    "sha256": "acdb02ec547d05147bb3a2ff317aeb75580881b54b94776937ea5ea57e8bb973",
+    "bytes": 37223
+  },
+  "host/data_browser.css": {
+    "sha256": "5eedb01995f44aa417373227d13b879991a2e4b5e3d8c4a31d8aa9f011d3b6e5",
+    "bytes": 6755
+  },
+  "host/joint_limits.py": {
+    "sha256": "7dd0879391a4cf5c8abd8edb332dbb7dd3e41ea907bcffc3de0b49d00dc3691c",
+    "bytes": 4259
+  },
+  "host/intergrated_test_server.py": {
+    "sha256": "0ecd3d49cda76c6567e4251b8598bff8ab50ff3ef21fa81ab88bdf6367dcca25",
+    "bytes": 22139
+  },
+  "host/washer_adapter.py": {
+    "sha256": "d44b8cc5d44f5163f0c3ab8cecebf29eae8814adbcd96a935180ab358e9da839",
+    "bytes": 10096
+  },
+  "host/run_water.py": {
+    "sha256": "1980bb25124be46a8d40f994b32353ae723e82517e91c1521055519ce650cf29",
+    "bytes": 16498
+  },
+  "host/run_place.py": {
+    "sha256": "72f13e9a100efaf4e236dccd63dc8053b9be4d3cd461993c42e98feab216282b",
+    "bytes": 11182
+  },
+  "host/run_pick.py": {
+    "sha256": "22ef41a896fe8e3652ffcace6529aee7f676212f5320a411f331b453abb681bb",
+    "bytes": 17669
+  },
+  "host/test_a1.py": {
+    "sha256": "cf2cd68df1f0d50e9f0919cc8aa01d821b8158c3980deb36361737c78b079ef8",
+    "bytes": 8607
+  },
+  "host/start_server.sh": {
+    "sha256": "5391d3bb13653813e31d49639bce33e15f5b95061b1432166b0f60e5a9de09ff",
+    "bytes": 978
+  },
+  "host/chunk_log.py": {
+    "sha256": "b7e39b341518c5a41de4795e9d97c8f5351ff6bd799da5171a908ac0f68c3dfd",
+    "bytes": 7813
+  },
+  "host/episode_control.py": {
+    "sha256": "c7dc8b80281d73bb78f9f50a822a25b22154966c448091e1b89e2194154acecc",
+    "bytes": 17976
+  },
+  "host/intergrated_test.html": {
+    "sha256": "1b5c37c8aac26d7a8f1222d79cbaa75c08d2b513d168b7a59cfb0cbce2143fe1",
+    "bytes": 62577
+  },
+  "host/vr_proxy.py": {
+    "sha256": "f4dead9c78c8379bf62bafa5cd58b9ee59fabf75c21f961c0eac4f0e86c8b826",
+    "bytes": 3108
+  },
+  "config/config_V2_0.json": {
+    "sha256": "21403835ce63bbb30ccfc60e8e531a059e75b8ac19951e972e9ab5b8b1a8ace1",
+    "bytes": 79189
+  },
+  "config/robot_config_ori.json": {
+    "sha256": "42fae08714e48917aad64fce75ed749c87a9b5c4d2521398080f4ab788c58e2f",
+    "bytes": 342
+  }
+}

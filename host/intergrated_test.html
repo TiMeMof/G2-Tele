@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/data_browser.css">
+    <title>Agibot 综合测试</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #1f2937; font-family: "Microsoft YaHei", Arial, sans-serif; padding: 22px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .header { background: rgba(255, 255, 255, 0.97); padding: 28px; border-radius: 16px; box-shadow: 0 16px 48px rgba(31, 41, 55, 0.15); margin-bottom: 24px; }
+        h1 { font-size: 36px; margin-bottom: 10px; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .subtitle { font-size: 16px; color: #6b7280; margin-bottom: 18px; line-height: 1.6; }
+        .top-actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+        .stats { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 18px; }
+        .stat-box { flex: 1; min-width: 160px; background: linear-gradient(135deg, #f0f4ff, #e0e7ff); padding: 16px; border-radius: 12px; }
+        .stat-label { font-size: 13px; color: #6b7280; margin-bottom: 6px; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #4338ca; }
+        .current-task-box { flex: 1 1 100%; }
+        .current-task-value { font-size: 24px; font-weight: 700; color: #6b7280; }
+        .current-task-value.running { color: #f59e0b; }
+        .section { background: rgba(255, 255, 255, 0.97); border-radius: 16px; padding: 24px; box-shadow: 0 16px 48px rgba(31, 41, 55, 0.15); margin-bottom: 24px; }
+        .notice { border-left: 4px solid #d97706; background: #fff7ed; color: #7c2d12; padding: 20px 24px; }
+        .notice h2 { font-size: 20px; margin-bottom: 12px; font-weight: 700; }
+        .notice ul { margin-left: 20px; line-height: 1.9; font-size: 14px; }
+        .section-title { font-size: 24px; font-weight: 700; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb; color: #111827; }
+        .task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+        .task-card { background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 20px; transition: all 0.3s; position: relative; overflow: hidden; }
+        .task-card:before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #667eea, #764ba2); transform: scaleX(0); transition: transform 0.3s; }
+        .task-card:hover { border-color: #667eea; box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2); }
+        .task-card:hover:before { transform: scaleX(1); }
+        .task-card.running { border-color: #f59e0b; background: #fffbeb; animation: pulse 2s infinite; }
+        .task-card.success { border-color: #10b981; background: #ecfdf5; }
+        .task-card.failed { border-color: #ef4444; background: #fef2f2; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
+        .task-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #111827; display: flex; align-items: center; gap: 8px; }
+        .task-status { font-size: 14px; color: #6b7280; margin-bottom: 12px; min-height: 20px; }
+        .task-buttons { display: flex; gap: 8px; margin-top: 14px; }
+        button { height: 42px; border: 0; border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; padding: 0 16px; transition: all 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; flex: 1; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); }
+        .btn-primary:disabled { background: #d1d5db; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: #10b981; color: #fff; flex: 1; }
+        .btn-secondary:hover { background: #059669; transform: translateY(-2px); }
+        .btn-interrupt { background: #ef4444; color: #fff; flex: 1; font-weight: 700; font-size: 15px; animation: attention 2s infinite; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); }
+        .btn-interrupt:hover { background: #dc2626; transform: translateY(-2px) scale(1.05); box-shadow: 0 8px 20px rgba(239, 68, 68, 0.5); }
+        @keyframes attention { 0%, 100% { box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); } 50% { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.7); } }
+        .modal { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); padding: 20px; }
+        .modal.show { display: flex; }
+        .modal-content { width: min(600px, 100%); max-height: 80vh; background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3); overflow: auto; }
+        .modal-title { font-size: 22px; font-weight: 700; margin-bottom: 16px; color: #111827; }
+        .modal-output { background: #1f2937; color: #f3f4f6; padding: 16px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+        .icon { display: inline-block; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-size: 14px; }
+        .icon-running { background: #fef3c7; color: #f59e0b; }
+        .icon-success { background: #d1fae5; color: #10b981; }
+        .icon-failed { background: #fee2e2; color: #ef4444; }
+        @media (max-width: 768px) { body { padding: 12px; } .header { padding: 20px; } .task-grid { grid-template-columns: 1fr; } }
+
+        [hidden] { display: none !important; }
+        button:disabled { cursor: not-allowed; opacity: .55; transform: none !important; }
+        .top-actions [aria-selected="true"] { color: white; background: #4f46e5; }
+        .top-actions [aria-selected="false"] { color: #4b5563; background: #eef2ff; }
+        fieldset { border: 0; min-width: 0; }
+        .settings-top, .settings-footer, .limit-control { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+        .mode-switch { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #4f46e5; vertical-align: middle; }
+        .status-badge, .empty-label { font-size: 12px; border-radius: 20px; background: #fff7ed; color: #9a3412; padding: 6px 10px; }
+        .help { font-size: 13px; line-height: 1.6; color: #6b7280; font-weight: 400; }
+        #modeHint { margin-top: 12px; }
+        .settings-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 24px; margin: 20px 0; }
+        .field { display: flex; flex-direction: column; gap: 9px; font-size: 14px; font-weight: 600; }
+        input[type="text"], input[type="number"] { border: 1px solid #d1d5db; border-radius: 7px; background: white; padding: 11px 12px; font: inherit; width: 100%; }
+        input:focus-visible, button:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
+        input:disabled { background: #f3f4f6; }
+        .limit-control input[type="number"] { width: 105px; }
+        .limit-control label { font-weight: 400; white-space: nowrap; }
+        .settings-footer .btn-primary { flex: initial; }
+        #configStatus { font-size: 13px; color: #6b7280; }
+        .empty-state { text-align: center; padding: 48px 20px; max-width: 800px; margin: auto; }
+        .empty-state h3 { font-size: 24px; margin: 22px 0 12px; }
+        .empty-state p { color: #6b7280; line-height: 1.9; }
+        .directory-preview { margin: 28px 0; padding: 18px; border-radius: 10px; background: #f3f4f6; text-align: left; }
+        .directory-preview span { display: block; color: #6b7280; font-size: 12px; margin-bottom: 10px; }
+        .directory-preview code { overflow-wrap: anywhere; }
+        @media (max-width: 768px) { .settings-grid { grid-template-columns: 1fr; } h1 { font-size: 28px; } .empty-state { padding: 28px 0; } }
+        .vr-test { border-top: 1px solid #e5e7eb; margin-top: 22px; padding-top: 20px; }
+        .vr-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+        .vr-heading h3 { font-size:18px; }
+        .vr-heading button { flex:none; min-width:130px; }
+        .vr-summary { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:16px 0; }
+        #vrState { font-weight:700; font-size:15px; border-radius:8px; padding:10px 14px; background:#f3f4f6; color:#4b5563; }
+        #vrState[data-state="active"] { background:#fef2f2; color:#b91c1c; }
+        #vrState[data-state="idle"] { background:#ecfdf5; color:#047857; }
+        #vrState[data-state="unknown"] { background:#fff7ed; color:#9a3412; }
+        .vr-hands { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+        .vr-hand { padding:16px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; }
+        .vr-hand h4 { display:flex; justify-content:space-between; font-size:15px; margin-bottom:14px; }
+        .vr-hand h4 span { font-size:13px; font-weight:400; color:#6b7280; }
+        .vr-signal { display:grid; grid-template-columns:75px minmax(40px,1fr) 52px; align-items:center; gap:8px; margin:9px 0; font-size:13px; }
+        .vr-signal progress { width:100%; accent-color:#6366f1; height:12px; }
+        .vr-signal output { font-variant-numeric:tabular-nums; text-align:right; }
+        #vrReadStatus { line-height:1.6; }
+        #vrEdges { margin-top:12px; min-height:22px; }
+        @media(max-width:600px) { .vr-hands { grid-template-columns:1fr; } }
+        #episodeDialog { margin:auto; padding:26px; border:0; border-radius:18px; width:min(700px,calc(100vw - 24px)); max-height:calc(100dvh - 40px); overflow:auto; color:#1f2937; box-shadow:0 24px 80px #0f172a55; }
+        #episodeDialog::backdrop { background:#0f172aa6; backdrop-filter:blur(3px); }
+        .intervention-heading { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+        .intervention-heading h2 { font-size:23px; line-height:1.45; }
+        .eyebrow { color:#6366f1; font-size:12px; font-weight:700; margin-bottom:5px; }
+        .dialog-close { flex:none; width:40px; padding:0; font-size:25px; color:#64748b; background:#f1f5f9; }
+        #failureForm { border-top:1px solid #e2e8f0; padding-top:18px; margin-top:18px; }
+        #failureChoices { font-size:14px; }
+        #episodeRecording { overflow-wrap:anywhere; margin-top:14px; }
+        #episodeMessage { margin-top:12px; color:#4338ca; }
+        .dialog-footnote { border-top:1px solid #e2e8f0; padding-top:12px; margin-top:18px; }
+        .text-button { height:auto; padding:8px 0; background:transparent; color:#4f46e5; font-weight:600; }
+        .task-options { margin-top:10px; width:100%; background:#eef2ff; color:#4338ca; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Agibot 综合测试</h1>
+            <p class="subtitle">任务运行与人工接管采集</p>
+            <nav class="top-actions" role="tablist" aria-label="测试与数据">
+                <button id="runTab" role="tab" aria-selected="true" aria-controls="runPanel" onclick="selectTab('run')">运行测试</button>
+                <button id="dataTab" role="tab" aria-selected="false" aria-controls="dataPanel" onclick="selectTab('data')">采集数据</button>
+            </nav>
+            <div class="stats">
+                <div class="stat-box current-task-box">
+                    <div class="stat-label">当前运行任务</div>
+                    <div class="current-task-value" id="currentTask">无任务运行</div>
+                </div>
+            </div>
+        </div>
+
+        <main id="runPanel" role="tabpanel" aria-labelledby="runTab">
+        <section class="section settings">
+            <h2 class="section-title">运行配置</h2>
+            <form id="settingsForm" onsubmit="event.preventDefault(); saveSettings()">
+                <fieldset id="settingsFields" disabled>
+                    <div class="settings-top">
+                        <label class="mode-switch"><input id="humanMode" type="checkbox"> 启用人工接管模式</label>
+                        <span class="status-badge">接管暂停 · 动作块记录</span>
+                    </div>
+                    <p id="modeHint" class="help">普通测试不创建采集记录。</p>
+                    <div class="settings-grid">
+                        <label class="field">数据保存根目录（机器人61）
+                            <input id="dataDirectory" type="text" spellcheck="false" required aria-describedby="directoryHelp">
+                            <span id="directoryHelp" class="help">默认 /data/yfmo。统一采集保存在机器人配置的 sessions/分类/任务/日期/任务ID 下，包含原始数据、模型输出与标注。</span>
+                        </label>
+                        <div class="field">最大人工接管次数
+                            <div class="limit-control">
+                                <input id="maxInterventions" aria-label="最大人工接管次数" type="number" min="0" step="1" value="3" required>
+                                <label><input id="unlimited" type="checkbox"> 不限次数</label>
+                            </div>
+                            <span class="help">按人工纠正轮次统计，0 表示不允许人工纠正。</span>
+                        </div>
+                    </div>
+                    <div class="settings-footer"><button id="saveConfig" type="submit" class="btn-primary">保存配置</button>
+                        <span id="configStatus" role="status" aria-live="polite">正在读取配置…</span>
+                    </div>
+                </fieldset>
+            </form>
+            <div class="vr-test" aria-labelledby="vrTitle">
+                <div class="vr-heading">
+                    <h3 id="vrTitle">VR 连接与接管检测</h3>
+                    <button id="vrTestButton" type="button" class="btn-primary" onclick="toggleVrTest()" aria-pressed="false">测试 VR</button>
+                </div>
+                <div class="vr-summary">
+                    <span id="vrState" data-state="off" role="status" aria-live="polite">尚未检测</span>
+                    <span id="vrReadStatus" class="help">点击“测试 VR”查看实时数据。</span>
+                </div>
+                <div class="vr-hands">
+                    <div class="vr-hand">
+                        <h4>左手 <span id="vrLeftState">—</span></h4>
+                        <div class="vr-signal"><label for="vrLeftArmBar">接管键</label><progress id="vrLeftArmBar" max="1" value="0"></progress><output id="vrLeftArm">—</output></div>
+                        <div class="vr-signal"><label for="vrLeftGripperBar">夹爪键</label><progress id="vrLeftGripperBar" max="1" value="0"></progress><output id="vrLeftGripper">—</output></div>
+                    </div>
+                    <div class="vr-hand">
+                        <h4>右手 <span id="vrRightState">—</span></h4>
+                        <div class="vr-signal"><label for="vrRightArmBar">接管键</label><progress id="vrRightArmBar" max="1" value="0"></progress><output id="vrRightArm">—</output></div>
+                        <div class="vr-signal"><label for="vrRightGripperBar">夹爪键</label><progress id="vrRightGripperBar" max="1" value="0"></progress><output id="vrRightGripper">—</output></div>
+                    </div>
+                </div>
+                <p id="vrEdges" class="help">最近变化：—</p>
+                <p class="help">接管键 ≥ 0.2 判为接管，松开为 0；夹爪键不计入接管判定。“测试 VR”只读取状态。当前临时规则：运行中 VR 过期、未知或断连只提示，不自动暂停；检测到接管键按下立即暂停，松开并稳定300ms后自动恢复；网页手动暂停仍需手动继续。开始、继续及复位前仍需确认接管键已松开。</p>
+            </div>
+        </section>
+
+
+
+        <section class="section notice">
+            <h2>测试说明</h2>
+            <ul>
+                <li><strong>开关抽屉和抽屉拿药距离</strong>：居中60.5m（放药侧距离的姿态）</li>
+                <li><strong>奥美拉唑和康复新液</strong>：桌子左边到机器人中部70cm，海绵转圈（180°，从拿纸巾））。</li>
+                <li><strong>右臂眼镜纸巾</strong>：桌子右边到机器中部70cm，p16距离桌子右边28cm，下面10cm。</li>
+                <li><strong>右臂拿水</strong>：桌子右边到机器人中部61cm，p16到桌子右边38cm（拉桌布）。</li>
+                <li><strong>放置距离</strong>：居中27.5cm。</li>
+                <li><strong>新增右臂任务注意</strong>：左臂需要拿东西</li>
+                <li><strong>新增左臂任务注意</strong>：右臂需要拿东西</li>
+            </ul>
+        </section>
+
+        <div class="section">
+            <div class="section-title">拿取任务 (Pick Tasks) - 桌面拿取</div>
+            <div class="task-grid" id="pickTasks"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">放置任务 (Place Tasks)</div>
+            <div class="task-grid" id="placeTasks"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">接水任务 (Water Tasks)</div>
+            <div class="task-grid" id="waterTasks"></div>
+        </div>
+        <div class="section">
+            <div class="section-title">洗衣机任务 (Washer Tasks)</div>
+            <div class="task-grid" id="washerTasks"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">抽屉操作 (Drawer Operations)</div>
+            <div class="task-grid" id="drawerTasks"></div>
+        </div>
+        </main>
+        <section id="dataPanel" class="section" role="tabpanel" aria-labelledby="dataTab" hidden>
+            <div class="data-heading"><div><h2>采集数据</h2><p class="help">选择一次任务，回看模型动作与人工纠正的时间关系。</p></div><button id="dataRefresh" onclick="DataBrowser.refresh()">刷新记录</button></div>
+            <div class="data-filters">
+                <label>任务<input id="dataTaskFilter" type="text" placeholder="搜索任务名称" oninput="DataBrowser.filter()"></label>
+                <label>日期（北京时间）<input id="dataDateFilter" type="date" onchange="DataBrowser.refresh()"></label>
+                <label>结果<select id="dataResultFilter" onchange="DataBrowser.refresh()"><option value="">全部结果</option><option value="success">成功</option><option value="failure">失败</option><option value="ongoing">未结束</option><option value="incomplete">异常结束 / 未标注</option></select></label>
+                <label>人工接管<select id="dataHumanFilter" onchange="DataBrowser.refresh()"><option value="">全部记录</option><option value="yes">发生过接管</option><option value="no">未发生接管</option></select></label>
+            </div>
+            <p id="dataError" class="data-error" role="status"></p>
+            <div class="data-layout">
+                <aside class="record-sidebar" aria-label="任务记录列表"><p id="recordCount" class="help">正在读取…</p><div id="recordList" class="record-list"></div><button id="recordMore" class="text-button" hidden onclick="DataBrowser.more()">加载更多</button></aside>
+                <div class="record-detail"><div id="recordEmpty" class="record-empty">选择左侧的一条记录，查看接管过程。</div><div id="recordDetail" hidden>
+                    <div class="record-summary"><div><h3 id="recordTitle"></h3><p id="recordDate" class="help"></p></div><span id="recordOutcome" class="result-chip"></span></div>
+                    <div class="record-metrics"><div class="metric"><span>记录时长</span><strong id="recordDuration"></strong></div><div class="metric"><span>人工纠正</span><strong id="recordRounds"></strong></div><div class="metric"><span>动作块</span><strong id="recordChunks"></strong></div><div class="metric"><span>待处理记录</span><strong id="recordPending"></strong></div></div>
+                    <p id="recordResult" class="help"></p><div id="recordWarnings" class="record-note" hidden></div>
+                    <section class="timeline-box" aria-label="任务时间轴"><div class="timeline-top"><h4>模型 / 人工时间轴</h4><span id="timelineWindow" class="help"></span></div>
+                        <div class="timeline-legend"><span style="--color:#16a34a">模型推理</span><span style="--color:#dc2626">人工纠正</span><span style="--color:#cbd5e1">初始化 / 暂停</span><span style="--color:#e2e8f0">未知 / 未记录</span></div>
+                        <div class="timeline-row"><span class="timeline-label">任务阶段</span><div id="phaseTrack" class="timeline-track"></div></div>
+                        <div class="timeline-row"><span class="timeline-label">左手接管</span><div id="leftTrack" class="timeline-track small"></div></div>
+                        <div class="timeline-row"><span class="timeline-label">右手接管</span><div id="rightTrack" class="timeline-track small"></div></div>
+                        <div id="timelineTicks" class="timeline-ticks"></div>
+                        <p class="help" style="margin-top:12px">红色阶段从该轮接管开始持续至恢复推理或结束；左右手轨道来自运行时检测边沿，不是完整VR原始曲线。</p>
+                        <div id="roundButtons" class="timeline-controls"></div>
+                        <div class="timeline-controls"><button id="previousRound" onclick="DataBrowser.stepRound(-1)">← 上一轮</button><button id="nextRound" onclick="DataBrowser.stepRound(1)">下一轮 →</button><button onclick="DataBrowser.zoom(.5)">放大</button><button onclick="DataBrowser.zoom(2)">缩小</button><button onclick="DataBrowser.full()">全程</button><button onclick="DataBrowser.ending()">结束前10秒</button></div>
+                        <label class="help" for="timelinePan">拖动查看其他时段</label><input id="timelinePan" class="timeline-slider" type="range" min="0" max="1000" value="0" step="1" oninput="DataBrowser.pan(this.value)">
+                    </section>
+                    <section class="chunk-box"><h4>窗口内的 action chunk</h4><p id="chunkWindowCount" class="help" style="margin:10px 0"></p><div class="chunk-content"><div id="chunkList" class="chunk-list" aria-label="动作块列表"></div><div>
+                        <div class="chart-controls"><label>关节 / 夹爪<select id="chunkChannel" onchange="DataBrowser.drawChunk()"></select></label><div class="chart-legend"><span style="color:#4f46e5">紫：模型原始预测</span><br><span style="color:#d97706">橙：准备下发值</span> · 虚线：模型输入快照</div></div>
+                        <svg id="chunkChart" class="chunk-chart" viewBox="0 0 580 240" role="img" aria-label="动作块预测曲线"></svg>
+                        <p class="help" style="margin-top:8px">横轴为预测点序号；不代表机械臂各点的实际执行时刻。</p><div id="chunkInfo" class="chunk-details"></div>
+                    </div></div><div id="feedbackGap" class="feedback-gap"></div></section>
+                    <section class="event-box"><h4>窗口内事件</h4><div class="event-scroll"><table class="event-table"><thead><tr><th>相对时间</th><th>事件</th><th>说明</th></tr></thead><tbody id="eventRows"></tbody></table></div></section>
+                    <div id="recordStorage" class="data-storage"></div>
+                </div></div>
+            </div>
+            <p class="data-storage">配置的数据目录：<code id="dataDirectoryPreview">正在读取…</code>。新采集直接读取机器人记录；历史旧记录仍可只读查看。查看历史记录不会发送机器人控制请求。</p>
+        </section>
+    </div>
+
+    <dialog id="episodeDialog" aria-labelledby="episodeTitle" aria-describedby="episodeHelp">
+        <section id="episodePanel">
+            <div class="intervention-heading"><div><p class="eyebrow">当前任务</p><h2 id="episodeTitle">人工接管任务</h2></div><button id="episodeClose" class="dialog-close" onclick="closeInterventionDialog()" aria-label="关闭任务窗口">×</button></div>
+            <p id="episodeStatus" role="status" style="margin:12px 0"></p>
+            <p id="episodeHelp" class="help"></p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin:16px 0">
+                <button id="episodeResume" class="btn-primary" onclick="episodeCommand('resume')">继续推理</button>
+                <button id="episodeReset" class="btn-secondary" onclick="episodeCommand('reset')">复位</button>
+                <button id="episodeSuccess" class="btn-secondary" onclick="episodeCommand('success')">成功</button>
+                <button id="episodeFailure" class="btn-primary" onclick="document.getElementById('failureForm').hidden=false">失败</button>
+            </div>
+            <form id="failureForm" hidden onsubmit="event.preventDefault();episodeCommand('failure')">
+                <p>选择失败原因（可多选）：</p><div id="failureChoices" style="display:flex;gap:14px;flex-wrap:wrap;margin:12px 0"></div>
+                <label>补充说明（选择“其他”时必填）<textarea id="failureNote" maxlength="2000" style="display:block;width:100%;min-height:75px;margin:8px 0"></textarea></label>
+                <button id="failureSubmit" class="btn-primary" type="submit">保存失败结果</button>
+            </form>
+            <p id="episodeRecording" class="help"></p><button id="episodeViewData" class="text-button" onclick="viewCurrentEpisodeData()">查看本次数据 →</button>
+            <p id="episodeMessage" role="status" class="help"></p><p class="help dialog-footnote">关闭窗口不会继续推理，可从任务卡片重新打开。</p>
+        </section>
+    </dialog>
+
+    <div id="outputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">任务输出</div>
+            <div class="modal-output" id="modalOutput">等待输出...</div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="closeModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/data_browser.js"></script>
+    <script>
+        let vrTesting = false;
+        let vrGeneration = 0;
+        let vrTimer = null;
+        let vrController = null;
+        let vrLastReply = null;
+        let vrLastReplyAt = 0;
+
+        function clearVrHands() {
+            for (const side of ['Left', 'Right']) {
+                document.getElementById(`vr${side}State`).textContent = '—';
+                for (const kind of ['Arm', 'Gripper']) {
+                    document.getElementById(`vr${side}${kind}`).textContent = '—';
+                    document.getElementById(`vr${side}${kind}Bar`).value = 0;
+                }
+            }
+        }
+        function vrUnknown(message) {
+            const badge = document.getElementById('vrState');
+            if (badge.textContent !== '状态未知') badge.textContent = '状态未知';
+            badge.dataset.state = 'unknown';
+            document.getElementById('vrReadStatus').textContent = message;
+            clearVrHands();
+        }
+        function renderVrStatus(data, elapsed = 0) {
+            const effectiveAge = data.age_ms === null ? null : data.age_ms + elapsed;
+            if (!data.fresh || effectiveAge === null || effectiveAge > 250 || data.takeover === null) {
+                const messages = {
+                    waiting_for_vr: '尚未收到 VR 新帧，请检查 VR 与机器人是否已连接。',
+                    vr_stale: 'VR 数据已过期，无法判断接管状态。',
+                    transport_stale: '数据传输延迟过大，等待新帧。',
+                    vr_disconnected: '机器人报告 VR 连接已断开。',
+                    decode_error: 'VR 数据解析异常。',
+                    source_restarted: 'VR 数据源发生变化，等待新的有效帧。',
+                    invalid_or_missing_hand: '左右手数据不完整，等待有效帧。'
+                };
+                vrUnknown(effectiveAge !== null && effectiveAge > 250 ? 'VR 数据已过期，无法判断接管状态。' : messages[data.reason] || 'VR 数据不可用，无法判断接管状态。');
+                return;
+            }
+            const badge = document.getElementById('vrState');
+            const label = data.takeover ? '接管中' : '未接管';
+            if (badge.textContent !== label) badge.textContent = label;
+            badge.dataset.state = data.takeover ? 'active' : 'idle';
+            document.getElementById('vrReadStatus').textContent = `读取正常 · 有效帧率 ${data.rate_hz.toFixed(1)} Hz · 数据年龄 ${Math.round(effectiveAge)} ms · 阈值 0.2`;
+            for (const [key, side] of [['left','Left'], ['right','Right']]) {
+                const hand = data.hands[key];
+                document.getElementById(`vr${side}State`).textContent = hand.active ? '接管中' : '未接管';
+                for (const [field, kind] of [['arm','Arm'], ['gripper','Gripper']]) {
+                    document.getElementById(`vr${side}${kind}`).textContent = hand[field].toFixed(3);
+                    document.getElementById(`vr${side}${kind}Bar`).value = hand[field];
+                }
+            }
+        }
+        async function pollVr(generation) {
+            if (!vrTesting || generation !== vrGeneration) return;
+            const controller = new AbortController();
+            vrController = controller;
+            const timeout = setTimeout(() => controller.abort(), 1200);
+            const started = performance.now();
+            try {
+                const response = await fetch('/api/vr/status', {cache:'no-store', signal:controller.signal});
+                const data = await response.json();
+                if (!vrTesting || generation !== vrGeneration) return;
+                if (!response.ok || !data.success) throw new Error(data.message || 'VR 读取服务不可用');
+                if (data.age_ms !== null) data.age_ms += performance.now() - started;
+                vrLastReply = data;
+                vrLastReplyAt = performance.now();
+                renderVrStatus(data);
+                const recent = (data.recent_edges || []).filter(e => e.kind === 'edge' && e.age_ms < 30000).slice(-4);
+                document.getElementById('vrEdges').textContent = '最近变化：' + (recent.length ? recent.map(e => `${e.side === 'left' ? '左手' : '右手'}${e.active ? '按下' : '松开'}`).join(' → ') : '—');
+            } catch (error) {
+                if (vrTesting && generation === vrGeneration) {
+                    vrLastReply = null;
+                    vrUnknown(error.name === 'AbortError' ? '读取超时，等待机器人的VR观察服务。' : error.message);
+                }
+            } finally {
+                clearTimeout(timeout);
+                if (vrController === controller) vrController = null;
+                if (vrTesting && generation === vrGeneration) vrTimer = setTimeout(() => pollVr(generation), 150);
+            }
+        }
+        function toggleVrTest() {
+            vrTesting = !vrTesting;
+            vrGeneration += 1;
+            clearTimeout(vrTimer);
+            if (vrController) vrController.abort();
+            vrLastReply = null;
+            document.getElementById('vrTestButton').textContent = vrTesting ? '停止检测' : '测试 VR';
+            document.getElementById('vrTestButton').setAttribute('aria-pressed', String(vrTesting));
+            if (vrTesting) {
+                vrUnknown('正在读取机器人的VR数据…');
+                pollVr(vrGeneration);
+            } else {
+                const badge = document.getElementById('vrState');
+                badge.textContent = '检测已停止'; badge.dataset.state = 'off';
+                document.getElementById('vrReadStatus').textContent = '点击“测试 VR”重新读取实时状态。';
+                document.getElementById('vrEdges').textContent = '最近变化：—';
+                clearVrHands();
+            }
+        }
+        setInterval(() => {
+            if (vrTesting && vrLastReply) renderVrStatus(vrLastReply, performance.now() - vrLastReplyAt);
+        }, 50);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && vrTesting) toggleVrTest();
+        });
+
+        const taskStates = {};
+        let allTasks = {};
+        let savedConfig = null;
+        let configDirty = false;
+        let configBusy = false;
+        let serverState = { locked: false, taskId: null, operation: null };
+        let serverAvailable = false;
+        let episodeBusy = false;
+        let configLoadGeneration = 0;
+
+        function isBusy() {
+            return serverState.locked || Object.values(taskStates).some(s => s.running);
+        }
+        function updateSettingsUi() {
+            const blocked = isBusy() || configBusy || !serverAvailable;
+            document.getElementById('settingsFields').disabled = blocked;
+            document.getElementById('maxInterventions').disabled = document.getElementById('unlimited').checked;
+            document.getElementById('modeHint').textContent = document.getElementById('humanMode').checked
+                ? (serverState.takeover_readiness?.ready ? '当前开放：洗衣机分类全部任务，使用各任务自身的模型配置。接管后停止新动作下发，松开稳定300ms后自动继续；机器人原始数据与VR在同一会话中持续记录。' : '尚未就绪：' + ((serverState.takeover_readiness?.blockers || ['正在读取准备状态']).join('；')))
+                : '普通测试不创建采集记录。';
+            if (isBusy()) document.getElementById('configStatus').textContent = '任务运行或复位中，配置已锁定';
+        }
+        function fillSettings(config) {
+            document.getElementById('humanMode').checked = config.human_takeover_enabled;
+            document.getElementById('dataDirectory').value = config.data_dir;
+            document.getElementById('unlimited').checked = config.max_interventions === null;
+            document.getElementById('maxInterventions').value = config.max_interventions ?? 3;
+            document.getElementById('dataDirectoryPreview').textContent = config.data_dir;
+        }
+        async function loadConfig() {
+            const generation=++configLoadGeneration;
+            try {
+                const response = await fetch('/api/config');
+                const result = await response.json();
+                if (generation!==configLoadGeneration) return;
+                if (!result.success) throw new Error(result.message);
+                serverAvailable = true;
+                serverState = result;
+                renderEpisode(result.episode);
+                if (!configDirty && !configBusy) {
+                    const changed = JSON.stringify(savedConfig) !== JSON.stringify(result.config);
+                    savedConfig = result.config;
+                    if (changed) fillSettings(savedConfig);
+                    document.getElementById('configStatus').textContent = '配置已同步；运行后将锁定';
+                }
+            } catch (error) {
+                if (generation!==configLoadGeneration) return;
+                serverAvailable = false;
+                document.getElementById('configStatus').textContent = '配置不可用：' + error.message;
+            }
+            updateSettingsUi();
+            renderTasks();
+            renderInterventionDialog();
+        }
+
+        const pauseLabels = {vr_takeover:'VR按键接管',manual_interrupt:'网页中止',vr_unknown:'VR状态未知（旧记录）',vr_observer_restarted:'VR观察服务重启（旧记录）'};
+        function episodeStateText(ep) {
+            const reason=ep.pause_reason?' · '+(pauseLabels[ep.pause_reason]||ep.pause_reason):'';
+            const warning=ep.phase==='running' && ep.vr_health_warning?' · VR状态未知（仅提示，推理继续）':'';
+            return (episodeLabels[ep.phase] || ep.phase)+reason+warning;
+        }
+        const episodeLabels = {initializing:'初始化中',running:'模型运行中',paused:'已暂停',awaiting_result:'等待人工判定',resetting:'复位中',succeeded:'已标注成功',failed:'已标注失败'};
+        let dialogContext = null;
+        let seenEpisodePhase = null;
+        const legacyInterventions = {};
+        const runRequests = {};
+        function closeInterventionDialog() {
+            document.getElementById('episodeDialog').close();
+            document.body.style.overflow = '';
+        }
+        document.getElementById('episodeDialog').addEventListener('cancel', event => {
+            event.preventDefault(); closeInterventionDialog();
+        });
+        function setDialogContext(context) {
+            if (!dialogContext || dialogContext.id !== context.id || dialogContext.kind !== context.kind) {
+                document.getElementById('failureForm').hidden = true;
+                document.getElementById('failureNote').value = '';
+                document.getElementById('episodeMessage').textContent = '';
+                document.getElementById('failureChoices').replaceChildren();
+                for (const [key,label] of Object.entries(serverState.takeover_readiness?.failure_reasons || {})) {
+                    const wrapper = document.createElement('label');
+                    const input = document.createElement('input'); input.type='checkbox'; input.value=key;
+                    wrapper.append(input, document.createTextNode(' '+label));
+                    document.getElementById('failureChoices').append(wrapper);
+                }
+            }
+            dialogContext = context;
+        }
+        function showInterventionDialog(taskId, kind) {
+            const ep = serverState.episode;
+            const legacy = legacyInterventions[taskId];
+            if (!kind) kind = legacy ? 'legacy' : 'episode';
+            if (kind === 'episode' && ep?.taskId === taskId) setDialogContext({kind, taskId, id:ep.id});
+            else if (kind === 'legacy' && legacy) setDialogContext({kind, taskId, id:legacy.id});
+            else return;
+            renderInterventionDialog();
+            const dialog = document.getElementById('episodeDialog');
+            if (!dialog.open) { dialog.showModal(); document.body.style.overflow='hidden'; }
+        }
+        function renderEpisode(ep) {
+            const phaseKey = ep ? ep.id+':'+ep.phase : null;
+            const changed = phaseKey !== seenEpisodePhase;
+            seenEpisodePhase = phaseKey;
+            if (ep && changed && ['paused','awaiting_result'].includes(ep.phase)) {
+                showInterventionDialog(ep.taskId, 'episode');
+            } else if (changed && dialogContext?.kind === 'episode' && (!ep || ep.id !== dialogContext.id || ep.phase === 'running')) {
+                closeInterventionDialog();
+            }
+            renderInterventionDialog();
+        }
+        function renderInterventionDialog() {
+            if (!dialogContext) return;
+            const {kind,taskId,id} = dialogContext;
+            const ep = serverState.episode;
+            const title = allTasks[taskId]?.name || taskId;
+            document.getElementById('episodeTitle').textContent = title+(kind==='episode' && ep?.execution_error ? ' · 执行异常' : ' · 人工接管');
+            document.getElementById('episodeViewData').hidden = kind !== 'episode';
+            document.getElementById('episodeResume').hidden = kind !== 'episode';
+            if (kind === 'episode') {
+                if (!ep || ep.id !== id) return;
+                document.getElementById('episodeStatus').textContent = `${episodeStateText(ep)} · 人工纠正 ${ep.interventions}/${ep.max_interventions ?? '不限'} 轮${ep.execution_error ? ' · 执行异常，需结束后重新连接' : ''}`;
+                document.getElementById('episodeHelp').textContent = ep.execution_error ? '执行器通信或动作回执异常，上一动作的最终结果无法从113确认。本次不能继续推理；请核对机器人状态，并标注成功或失败。' : ep.phase==='awaiting_result' ? '推理已结束，等待人工标注结果，不能继续推理。' : '暂停后停止新的模型动作发送。松开接管键并保持稳定后，系统自动重新观测并恢复推理。';
+                const recording=ep.recording;
+                document.getElementById('episodeRecording').textContent=recording ? `动作块目录：${recording.directory_226} · 待传输 ${recording.pending_records} 条${recording.transfer_error ? ' · 传输异常，本地已保留，正在重试' : ''}${serverState.recording_error ? ' · 记录错误：'+serverState.recording_error : ''}` : '当前未创建动作块记录';
+                const paused=['paused','awaiting_result'].includes(ep.phase);
+                document.getElementById('episodeResume').disabled=episodeBusy || !ep.can_resume || !serverAvailable;
+                document.getElementById('episodeResume').title = ep.execution_error ? '执行异常：请先标注结果，不能继续推理' : ep.phase!=='paused' ? '只有暂停状态可以继续推理' : !ep.can_resume ? '请松开接管键并等待VR状态及旧请求恢复' : '';
+                document.getElementById('episodeReset').disabled=episodeBusy || !paused || ep.inflight || ep.inference_busy || !!ep.execution_error || !serverAvailable;
+                document.getElementById('episodeSuccess').disabled=episodeBusy || !paused || ep.inflight || ep.limit_exceeded || !serverAvailable;
+                document.getElementById('episodeFailure').disabled=episodeBusy || !paused || ep.inflight || !serverAvailable;
+                document.getElementById('failureSubmit').disabled=episodeBusy || !paused || ep.inflight || !serverAvailable;
+                if (['succeeded','failed'].includes(ep.phase)) document.getElementById('failureForm').hidden=true;
+            } else {
+                const item=legacyInterventions[taskId]; if (!item || item.id !== id) return;
+                document.getElementById('episodeStatus').textContent=item.pending ? '正在中止…' : item.result ? (item.result.success ? '已标注成功' : '已标注失败') : item.stopped ? '已中止 · 等待人工判定' : '中止未确认';
+                document.getElementById('episodeHelp').textContent='普通测试中止后可复位或标注结果。普通模式没有继续推理能力，也不会生成采集记录。';
+                document.getElementById('episodeRecording').textContent='普通测试的人工标注仅在当前页面显示。';
+                const disabled=episodeBusy || item.pending || !item.stopped || !!item.result || serverState.locked || !serverAvailable;
+                for (const key of ['episodeReset','episodeSuccess','episodeFailure','failureSubmit']) document.getElementById(key).disabled=disabled;
+                if (item.result) document.getElementById('failureForm').hidden=true;
+            }
+        }
+        async function episodeCommand(command) {
+            if (!dialogContext || episodeBusy) return;
+            const context={...dialogContext}, ep=serverState.episode;
+            const reasons=[...document.querySelectorAll('#failureChoices input:checked')].map(x=>x.value);
+            const note=document.getElementById('failureNote').value.trim();
+            const message=document.getElementById('episodeMessage');
+            if (command==='failure' && (!reasons.length || (reasons.includes('other') && !note))) {
+                message.textContent='请选择失败原因；选择“其他”时请填写说明。'; return;
+            }
+            if (context.kind==='legacy') {
+                const item=legacyInterventions[context.taskId];
+                if (!item || item.id!==context.id || !item.stopped || serverState.locked || item.result) return;
+                item.result={success:command==='success',reasons:command==='reset'?['manual_reset']:reasons,note};
+                taskStates[context.taskId]={running:false,success:item.result.success,status:item.result.success?'人工标注成功':'人工标注失败'};
+                message.textContent='已更新当前页面结果；普通模式不保存采集记录。';
+                renderInterventionDialog(); renderTasks();
+                if (command==='reset') {closeInterventionDialog(); await restoreTask(context.taskId, false);}
+                return;
+            }
+            if (!ep || ep.id!==context.id) return;
+            episodeBusy=true;renderInterventionDialog();
+            try {
+                const response=await fetch('/api/episode/command',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({command,episodeId:ep.id,revision:ep.revision,requestId:Date.now()+'-'+Math.random(),reasons,note})});
+                const data=await response.json();
+                if (!response.ok || !data.success) throw new Error(data.message || '操作未完成');
+                message.textContent=['success','failure','reset'].includes(command) ? '录制正在结束，结果已保存；请到采集数据页补齐每次接管原因后完成归档。' : '状态已更新';
+                if (command==='resume') closeInterventionDialog();
+            } catch(error) {message.textContent=error.message;}
+            finally {episodeBusy=false;await loadConfig();}
+        }
+
+        async function saveSettings() {
+            if (isBusy() || configBusy) return;
+            const unlimited = document.getElementById('unlimited').checked;
+            const limit = Number(document.getElementById('maxInterventions').value);
+            if (!unlimited && (!Number.isSafeInteger(limit) || limit < 0)) {
+                showNotification('接管次数必须为非负整数', 'error'); return;
+            }
+            configBusy = true;
+            updateSettingsUi();
+            renderTasks();
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({human_takeover_enabled: document.getElementById('humanMode').checked,
+                        data_dir: document.getElementById('dataDirectory').value,
+                        max_interventions: unlimited ? null : limit})
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+                savedConfig = result.config;
+                configDirty = false;
+                fillSettings(savedConfig);
+                document.getElementById('configStatus').textContent = result.message;
+                showNotification(result.message, 'success');
+            } catch (error) {
+                document.getElementById('configStatus').textContent = '未保存：' + error.message;
+                showNotification(error.message, 'error');
+            } finally {
+                configBusy = false; updateSettingsUi(); renderTasks();
+            }
+        }
+        function selectTab(tab) {
+            const data = tab === 'data';
+            document.getElementById('runPanel').hidden = data;
+            document.getElementById('dataPanel').hidden = !data;
+            document.getElementById('runTab').setAttribute('aria-selected', String(!data));
+            document.getElementById('dataTab').setAttribute('aria-selected', String(data));
+            history.replaceState(null, '', data ? '#data' : '#run');
+            if (data) DataBrowser.refresh();
+        }
+        document.getElementById('settingsForm').addEventListener('input', () => {
+            configDirty = true;
+            document.getElementById('configStatus').textContent = '有未保存的配置，请先保存再运行';
+            updateSettingsUi(); renderTasks();
+        });
+
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                const data = await response.json();
+                if (data.success) {
+                    allTasks = data.tasks;
+                    renderTasks();
+                }
+            } catch (error) {
+                console.error('加载任务失败:', error);
+            }
+        }
+
+        function renderTasks() {
+            const pickContainer = document.getElementById('pickTasks');
+            const placeContainer = document.getElementById('placeTasks');
+            const waterContainer = document.getElementById('waterTasks');
+            const washerContainer = document.getElementById('washerTasks');
+            const drawerContainer = document.getElementById('drawerTasks');
+            pickContainer.innerHTML = '';
+            placeContainer.innerHTML = '';
+            waterContainer.innerHTML = '';
+            washerContainer.innerHTML = '';
+            drawerContainer.innerHTML = '';
+
+            Object.entries(allTasks).forEach(([taskId, task]) => {
+                const card = createTaskCard(taskId, task);
+                // 抽屉拿药任务归类到抽屉操作
+                if (task.type === 'drawer' || (task.type === 'pick' && taskId.includes('drawer'))) {
+                    drawerContainer.appendChild(card);
+                } else if (task.type === 'pick') {
+                    pickContainer.appendChild(card);
+                } else if (task.type === 'place') {
+                    placeContainer.appendChild(card);
+                } else if (task.type === 'washer') {
+                    washerContainer.appendChild(card);
+                } else if (task.type === 'water') {
+                    waterContainer.appendChild(card);
+                }
+            });
+
+            updateStats();
+            updateSettingsUi();
+        }
+
+        function createTaskCard(taskId, task) {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.id = `task-${taskId}`;
+
+            const state = {...(taskStates[taskId] || {})};
+            if (serverState.locked && serverState.taskId === taskId) {
+                state.running = true;
+                state.status = serverState.operation === 'restore' ? '正在复位...' : '正在运行...';
+            }
+            const ep=serverState.episode?.taskId===taskId && !legacyInterventions[taskId] && !(taskStates[taskId]?.running && serverState.operation!=='takeover') ? serverState.episode : null;
+            const needsDecision=ep && ['paused','awaiting_result'].includes(ep.phase);
+            if (ep) {
+                state.status=`${episodeStateText(ep)} · 接管 ${ep.interventions}/${ep.max_interventions ?? '不限'} 轮`;
+                if (['succeeded','failed'].includes(ep.phase)) {state.running=false;state.success=ep.phase==='succeeded';}
+            }
+            const hasOptions=needsDecision || (ep && ['succeeded','failed'].includes(ep.phase)) || !!legacyInterventions[taskId];
+            const unavailable = isBusy() || configDirty || configBusy || !serverAvailable || !savedConfig || (savedConfig.human_takeover_enabled && (!serverState.takeover_readiness?.ready || !(serverState.takeover_readiness?.supported_task_ids || []).includes(taskId)));
+            if (state.running) card.classList.add('running');
+            else if (state.success === true) card.classList.add('success');
+            else if (state.success === false) card.classList.add('failed');
+
+            const icon = state.running ? '<span class="icon icon-running">⏳</span>'
+                       : state.success === true ? '<span class="icon icon-success">✓</span>'
+                       : state.success === false ? '<span class="icon icon-failed">✗</span>' : '';
+
+            card.innerHTML = `
+                <div class="task-title">${icon}${task.name}</div>
+                <div class="task-status" id="status-${taskId}">${state.status || '待测试'}</div>
+                <div class="task-buttons">
+                    <button class="btn-primary" onclick="runTask('${taskId}')" ${unavailable ? 'disabled' : ''}>
+                        ${state.running ? '运行中...' : '运行测试'}
+                    </button>
+                    ${needsDecision ? `<button class="btn-primary" onclick="showInterventionDialog('${taskId}','episode')">处理任务</button>` : state.running && serverState.operation !== 'restore' ?
+                      `<button class="btn-interrupt" onclick="interruptTask('${taskId}')" ${episodeBusy ? 'disabled' : ''}>中止</button>` :
+                      `<button class="btn-secondary" onclick="restoreTask('${taskId}')" ${isBusy() || configBusy || !serverAvailable ? 'disabled' : ''}>复位</button>`}
+                </div>
+                ${hasOptions && !needsDecision ? `<button class="task-options" onclick="showInterventionDialog('${taskId}')">${ep?.result || legacyInterventions[taskId]?.result ? '查看任务结果' : '处理任务'}</button>` : ''}
+            `;
+
+            return card;
+        }
+
+        async function interruptTask(taskId) {
+            if (episodeBusy || (serverState.taskId && serverState.taskId!==taskId)) return;
+            const isEpisode=serverState.operation==='takeover' && serverState.episode?.taskId===taskId;
+            if (!isEpisode) legacyInterventions[taskId]={id:'stop-'+Date.now(),pending:true,stopped:false,result:null};
+            episodeBusy=true;
+            showInterventionDialog(taskId,isEpisode?'episode':'legacy');
+            const message=document.getElementById('episodeMessage');
+            message.textContent='正在请求中止…';renderTasks();
+            try {
+                const response=await fetch('/api/stop-task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({taskId})});
+                const result=await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || '中止未完成');
+                if (!isEpisode) {
+                    legacyInterventions[taskId].stopped=true;
+                    taskStates[taskId]={running:false,status:'已中止 · 等待人工判定'};
+                }
+                message.textContent='请选择接下来的操作。';
+            } catch(error) {message.textContent='中止未确认：'+error.message;}
+            finally {
+                if (!isEpisode) legacyInterventions[taskId].pending=false;
+                episodeBusy=false;await loadConfig();renderInterventionDialog();
+            }
+        }
+
+        async function restoreTask(taskId, askConfirmation=true) {
+            const confirmed = !askConfirmation || confirm(`确定要复位任务 "${allTasks[taskId].name}" 吗？`);
+            if (!confirmed) return;
+
+            taskStates[taskId] = { running: true, status: '正在复位...' };
+            renderTasks();
+
+            try {
+                const response = await fetch('/api/restore-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId })
+                });
+
+                const result = await response.json();
+                taskStates[taskId] = {
+                    running: false,
+                    success: result.success,
+                    status: result.message
+                };
+
+                if (result.success) {
+                    showNotification(`✓ ${allTasks[taskId].name} 复位成功`, 'success');
+                } else {
+                    showNotification(`✗ ${allTasks[taskId].name} 复位失败`, 'error');
+                    showOutput(allTasks[taskId].name + ' - 复位', result.output || result.message);
+                }
+            } catch (error) {
+                taskStates[taskId] = {
+                    running: false,
+                    success: false,
+                    status: '复位失败: ' + error.message
+                };
+                showNotification(`✗ ${allTasks[taskId].name} 复位失败`, 'error');
+            }
+
+            renderTasks();
+        }
+
+        async function runTask(taskId) {
+            if (isBusy() || configDirty || configBusy || !serverAvailable || !savedConfig || (savedConfig.human_takeover_enabled && (!serverState.takeover_readiness?.ready || !(serverState.takeover_readiness?.supported_task_ids || []).includes(taskId)))) return;
+
+            const runId=Date.now()+'-'+Math.random();runRequests[taskId]=runId;
+            delete legacyInterventions[taskId];
+            taskStates[taskId] = { running: true, status: '正在运行...' };
+            renderTasks();
+
+            try {
+                const response = await fetch('/api/run-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskId })
+                });
+
+                const result = await response.json();
+                if (runRequests[taskId]!==runId) return;
+                if (legacyInterventions[taskId]) {
+                    legacyInterventions[taskId].output=result.output || result.message;
+                    await loadConfig();return;
+                }
+                if (result.episode) {
+                    delete taskStates[taskId];
+                    await loadConfig();
+                    return;
+                }
+                taskStates[taskId] = {
+                    running: false,
+                    success: result.success,
+                    status: result.message,
+                    output: result.output || ''
+                };
+
+                if (result.success) {
+                    showNotification(`✓ ${allTasks[taskId].name} 测试成功`, 'success');
+                } else {
+                    showNotification(`✗ ${allTasks[taskId].name} 测试失败`, 'error');
+                    showOutput(allTasks[taskId].name, result.output || result.message);
+                }
+            } catch (error) {
+                if (runRequests[taskId]!==runId || legacyInterventions[taskId]) {await loadConfig();return;}
+                taskStates[taskId] = {
+                    running: false,
+                    success: false,
+                    status: '测试失败: ' + error.message
+                };
+                showNotification(`✗ ${allTasks[taskId].name} 测试失败`, 'error');
+            }
+
+            renderTasks();
+        }
+
+        function updateStats() {
+            // 查找当前正在运行的任务，显示在顶部
+            const runningId = serverState.taskId || Object.keys(taskStates).find(id => taskStates[id].running);
+            const el = document.getElementById('currentTask');
+            if (runningId && allTasks[runningId]) {
+                el.textContent = allTasks[runningId].name;
+                el.classList.add('running');
+            } else {
+                el.textContent = '无任务运行';
+                el.classList.remove('running');
+            }
+        }
+
+        function showOutput(title, output) {
+            document.getElementById('modalTitle').textContent = title + ' - 输出';
+            document.getElementById('modalOutput').textContent = output || '无输出';
+            document.getElementById('outputModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('outputModal').classList.remove('show');
+        }
+
+        function showNotification(message, type) {
+            const colors = {
+                success: '#10b981',
+                error: '#ef4444',
+                info: '#3b82f6'
+            };
+
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 24px;
+                right: 24px;
+                background: ${colors[type] || colors.info};
+                color: white;
+                padding: 16px 24px;
+                border-radius: 12px;
+                box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+                z-index: 1000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        document.getElementById('outputModal').addEventListener('click', (e) => {
+            if (e.target.id === 'outputModal') closeModal();
+        });
+
+        selectTab(location.hash === '#data' ? 'data' : 'run');
+        loadTasks();
+        loadConfig();
+        setInterval(loadConfig, 2000);
+        setInterval(() => {
+            if (Object.values(taskStates).some(s => s.running)) {
+                updateStats();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
