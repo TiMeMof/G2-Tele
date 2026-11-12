@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 HOST_NAMES=("chunk_log.py","episode_control.py","data_browser.css","data_browser.js",
     "intergrated_test.html","intergrated_test_server.py","takeover_runtime.py",
     "washer_adapter.py","washer_tasks.py","vr_proxy.py","network_config.py",
-    "network.json","remote_records.py","web_config.py")
+    "network.json","remote_records.py","web_config.py","start_server.sh","web_restart.py")
 ROBOT_NAMES=("collection_server.py","storage.py","native_collector.py","record_view.py",
     "vr_monitor.py","vr_core.py")
 def build():
@@ -21,7 +21,7 @@ def build():
                 "previous_sha256":baseline.get(role+"/"+name,{}).get("sha256")}
     total=sum(v["bytes"] for v in manifest.values())
     if total>50_000_000:raise RuntimeError("Release needs explicit transfer-size approval")
-    (ROOT/"deploy/release_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
+    (ROOT/"deploy/release_manifest.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8",newline="\n")
     output=ROOT/"runtime/release.tar"
     with tarfile.open(output,"w") as archive:
         for name in manifest:archive.add(ROOT/name,arcname=name)

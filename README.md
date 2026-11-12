@@ -1,6 +1,6 @@
 # VLA 人工接管与采集系统
 
-当前部署：推理主机 113；机器人维护地址 192.168.50.61，新接管链路通过已核实的有线地址 **10.42.0.101** 通信。113 本地有线地址为 10.42.0.113。网页沿用 [综合测试页面](http://192.168.50.113:8084/intergrated_test.html)。
+当前部署：推理主机 **192.168.50.113**；机器人当前地址 **192.168.50.118**（原 61）。113 当前通过 192.168.50 网段访问机器人，启动网页时设置 `VLA_ROBOT_HOST=192.168.50.118`。历史直连配置 10.42.0.113 → 10.42.0.101 保留在 network.json，当前用环境变量覆盖。网页沿用 [综合测试页面](http://192.168.50.113:8084/intergrated_test.html)。
 
 ## 操作流程
 
@@ -87,6 +87,29 @@ python3 collection_server.py --host 0.0.0.0 --token-file session_receiver.token
 ~~~
 
 未配置开机自启；重启后先查端口和日志，避免重复启动。原 remote_env 由既有流程维护。
+
+### 网页重复启动与机器人新地址（2026-11-12）
+
+机器人原 192.168.50.61 现为 **192.168.50.118**，SSH 用户仍为 agi，程序目录未变。
+113 当前经 192.168.50 网段访问机器人；启动网页前使用 VLA_ROBOT_HOST 覆盖旧的直连地址：
+
+~~~bash
+export VLA_ROBOT_HOST=192.168.50.118
+cd /home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test
+source /home/lindenbot/miniconda3/etc/profile.d/conda.sh
+conda activate pi_05
+bash start_server.sh
+~~~
+
+start_server.sh 会检查 8084。如果占用者是当前目录的 intergrated_test_server.py，且网页确认没有任务、未结束的录制或待传数据，先发送 SIGTERM，等待旧服务释放端口，再启动新服务。启动时使用当前终端的机器人地址和环境。
+其他目录/程序占用、正在运行/暂停/等待结果、状态无法读取时会拒绝替换并说明原因；旧进程未按时退出时也不会强制结束。文件锁避免并发替换，Ctrl+C 会传给新网页进程。
+此流程只重启网页，不启动模型或机器人执行实例。普通模式中旧的 HOMECARE_ROBOT_HOST 常量仍需另行统一；上述地址覆盖用于当前人工接管采集模式。
+
+Linux 下可单独运行隔离端口的启动/替换验证（不连接机器人）：
+
+~~~bash
+python -m unittest discover -s tests -p 'test_web_restart.py' -v
+~~~
 
 ## 验证
 

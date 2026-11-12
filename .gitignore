@@ -11,6 +11,7 @@ runtime/
 logs/
 *.log
 *.pid
+.web_start.lock
 *.pbdat
 *.h5
 *.hdf5

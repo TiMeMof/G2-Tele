@@ -69,6 +69,16 @@
     "sha256": "ed544af6989c5d18f20b6bd417e34be5102f908d672b6ba8e3541bff27b3fa06",
     "previous_sha256": "612e31cd39e0adc8d2282bd6bf9f71aee4538c8db802701f4fba22e5d49cdf4e"
   },
+  "host/start_server.sh": {
+    "bytes": 1361,
+    "sha256": "f912150a79b6ccd80979f354ed6f1a8f8020eb3f02393aa49595e3bd3ad32f17",
+    "previous_sha256": "5391d3bb13653813e31d49639bce33e15f5b95061b1432166b0f60e5a9de09ff"
+  },
+  "host/web_restart.py": {
+    "bytes": 10342,
+    "sha256": "31516619fce91b7c977aaed41221b235d9ac17d484dd1327407131658a9eaa01",
+    "previous_sha256": null
+  },
   "robot/collection_server.py": {
     "bytes": 8784,
     "sha256": "5fd774d914e5478f511b8f1d9a68fd08896f974ea6831592e886aef126b5998c",
