@@ -20,8 +20,8 @@
     "previous_sha256": "1949eaf3e0e605b0af78f1fe1fc9dfb28f9f8c339b96fac92a186641b72aae18"
   },
   "host/intergrated_test.html": {
-    "bytes": 62414,
-    "sha256": "b7e322890cc5cdfd05e6cf23a109b397f69ca2c76ab302c8140afa6c2c537eab",
+    "bytes": 62340,
+    "sha256": "e71a2d446df0b3f23dc7aa9a3ff2579a44977c92a74ae100e6e61b05c9723db9",
     "previous_sha256": "1b5c37c8aac26d7a8f1222d79cbaa75c08d2b513d168b7a59cfb0cbce2143fe1"
   },
   "host/intergrated_test_server.py": {

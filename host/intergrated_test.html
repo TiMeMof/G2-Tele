@@ -697,7 +697,6 @@
                 if (['succeeded','failed'].includes(ep.phase)) {state.running=false;state.success=ep.phase==='succeeded';}
             }
             const hasOptions=needsDecision || (ep && ['succeeded','failed'].includes(ep.phase)) || !!legacyInterventions[taskId];
-            const unavailable = isBusy() || configDirty || configBusy || !serverAvailable || !savedConfig || (savedConfig.human_takeover_enabled && (!serverState.takeover_readiness?.ready || !(serverState.takeover_readiness?.supported_task_ids || []).includes(taskId)));
             if (state.running) card.classList.add('running');
             else if (state.success === true) card.classList.add('success');
             else if (state.success === false) card.classList.add('failed');
@@ -710,7 +709,7 @@
                 <div class="task-title">${icon}${task.name}</div>
                 <div class="task-status" id="status-${taskId}">${state.status || '待测试'}</div>
                 <div class="task-buttons">
-                    <button class="btn-primary" onclick="runTask('${taskId}')" ${unavailable ? 'disabled' : ''}>
+                    <button class="btn-primary" onclick="runTask('${taskId}')">
                         ${state.running ? '运行中...' : '运行测试'}
                     </button>
                     ${needsDecision ? `<button class="btn-primary" onclick="showInterventionDialog('${taskId}','episode')">处理任务</button>` : state.running && serverState.operation !== 'restore' ?
@@ -787,7 +786,10 @@
         }
 
         async function runTask(taskId) {
-            if (isBusy() || configDirty || configBusy || !serverAvailable || !savedConfig || (savedConfig.human_takeover_enabled && (!serverState.takeover_readiness?.ready || !(serverState.takeover_readiness?.supported_task_ids || []).includes(taskId)))) return;
+            if (isBusy()) {showNotification('已有任务运行或等待处理，请先结束当前任务。','error');return;}
+            if (configDirty) {showNotification('请先保存采集配置，再开始任务。','error');return;}
+            if (configBusy) {showNotification('采集配置正在保存，请稍后再试。','error');return;}
+            if (!serverAvailable || !savedConfig) {showNotification('尚未读到网页服务配置，请稍后重试。','error');return;}
 
             const runId=Date.now()+'-'+Math.random();runRequests[taskId]=runId;
             delete legacyInterventions[taskId];
