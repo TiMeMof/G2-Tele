@@ -13,7 +13,7 @@ const DataBrowser = (() => {
     const fmt=v=>Number.isFinite(v)?v.toFixed(2)+'s':'未知';
     function date(value) {try{return new Date(Number(BigInt(value)/1000000n)).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});}catch{return '日期未知';}}
     function node(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;}
-    async function get(url){const r=await fetch(url,{signal:AbortSignal.timeout(10000)});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'读取失败');return d;}
+    async function get(url){try{const r=await fetch(url,{signal:AbortSignal.timeout(30000)});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'读取失败');return d;}catch(e){if(e.name==='TimeoutError')throw new Error('读取超过30秒，请刷新重试；读取超时不表示采集数据为空。');throw e;}}
     function error(message){$('dataError').textContent=message||'';}
     function init(){if(initialized)return;initialized=true;
         const names=[...Array.from({length:7},(_,i)=>'左臂 J'+(i+1)),'左夹爪',...Array.from({length:7},(_,i)=>'右臂 J'+(i+1)),'右夹爪'];
@@ -27,7 +27,7 @@ const DataBrowser = (() => {
             if(data.errors?.length)error(`${data.errors.length} 条记录无法读取：${data.errors[0].message}`);
             if(currentId && rows.some(r=>r.episode_id===currentId))await select(currentId,true);
             else if(rows.length)await select(rows[0].episode_id);
-            else {currentId=null;detail=null;detailEpoch++;chunkEpoch++;$('recordDetail').hidden=true;$('recordEmpty').hidden=false;$('recordEmpty').textContent='没有符合筛选条件的任务记录。';}
+            else {currentId=null;detail=null;detailEpoch++;chunkEpoch++;$('recordDetail').hidden=true;$('recordEmpty').hidden=false;$('recordEmpty').textContent=data.errors?.length?'记录源暂时不可达，请检查连接后刷新。':'没有符合筛选条件的任务记录。';}
         } catch(e){if(request===listEpoch){error('读取记录失败：'+e.message);$('recordCount').textContent='读取失败，可点击刷新重试';}}
     }
     function renderList(){const list=$('recordList');list.replaceChildren();$('recordCount').textContent=`${total} 条记录 · 时间倒序`;$('recordMore').hidden=rows.length>=total;

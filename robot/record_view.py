@@ -69,6 +69,8 @@ def build_episode(episode_id, records, receipts=0, warnings=None):
     elapsed_records = [elapsed(r.get('recorded_114')) for r in records]
     duration = max([0.0]+[max(0,e['elapsed_s']) for e in events]+[t for t in elapsed_records if t is not None and t >= 0])
     if result: duration = max(duration, number(result.get('duration_s'), 0))
+    review_start=next((e['elapsed_s'] for e in events if e['kind']=='review_started'),None)
+    if review_start is not None:duration=min(duration,max(0,review_start))
     outcome = ('success' if result.get('success') is True else 'failure') if result else ('incomplete' if ends else 'ongoing')
 
     segments, rounds = [], []
@@ -86,7 +88,7 @@ def build_episode(episode_id, records, receipts=0, warnings=None):
             rounds.append(active_round)
         elif k=='paused' and phase!='human':next_phase='paused'
         elif k=='result_required' and phase!='human':next_phase='paused'
-        elif k=='result_decided':next_phase='ended'
+        elif k in {'result_decided','review_started'}:next_phase='ended'
         if next_phase!=phase:
             if t>since:segments.append({'start_s':since,'end_s':t,'kind':phase,'label':phase_labels[phase],'round':round_id if phase=='human' else None})
             if phase=='human' and active_round:

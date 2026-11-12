@@ -7,7 +7,8 @@ ROOT=Path(__file__).resolve().parents[1]
 HOST_NAMES=("chunk_log.py","episode_control.py","data_browser.css","data_browser.js",
     "intergrated_test.html","intergrated_test_server.py","takeover_runtime.py",
     "washer_adapter.py","washer_tasks.py","vr_proxy.py","network_config.py",
-    "network.json","remote_records.py","web_config.py","start_server.sh","web_restart.py")
+    "network.json","remote_records.py","record_browser.py","web_config.py","start_server.sh","web_restart.py",
+    "episode_review.py","episode_review.js")
 ROBOT_NAMES=("collection_server.py","storage.py","native_collector.py","record_view.py",
     "vr_monitor.py","vr_core.py")
 def build():

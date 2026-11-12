@@ -16,7 +16,7 @@ class RemoteRecordBrowser:
     def listing(self, params):
         filters={k:v[0] for k,v in params.items()}
         offset=max(0,int(filters.get("offset") or 0));limit=max(1,min(100,int(filters.get("limit") or 50)))
-        old=self.legacy.listing({**params,"offset":["0"],"limit":["100"]})
+        old=self.legacy.all_summaries(params)
         for row in old["records"]:row["legacy"]=True
         rows=list(old["records"]);errors=list(old.get("errors",[]))
         try:

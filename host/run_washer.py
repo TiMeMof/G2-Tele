@@ -12,6 +12,8 @@ import numpy as np
 import cv2
 import json
 import logging
+import os
+import select
 import argparse
 from contextlib import suppress
 from dataclasses import dataclass
@@ -29,7 +31,10 @@ PROJECT_DIR = ROOT_DIR.parents[1]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 from runtime_config import get_policy_host, configure_proxy_bypass
-from washer_tasks import HOMECARE_ROBOT_HOST, MOTION_UNKNOWN_EXIT, policy_for, resolve_running_policy
+from washer_tasks import (
+    HOMECARE_ROBOT_HOST, MOTION_UNKNOWN_EXIT, OPEN_WASHER_TASK, OPERATOR_FINISHED_EXIT,
+    OPERATOR_FINISH_BYTE, policy_for, resolve_running_policy,
+)
 
 from openpi_client import websocket_client_policy
 from core.corobot_env.g2_corobot_env import G2CorobotEnv
@@ -125,19 +130,25 @@ class DrawerControlConfig:
 
 
 class MotionUnknown(RuntimeError):
-    """A submitted trajectory did not receive a successful blocking reply."""
+    """A washer action was cancelled or its submission could not be confirmed."""
+
+
+class OperatorFinished(Exception):
+    """This action received the scoped finish signal."""
 
 
 class DrawerControl:
     """洗衣机门控制类 - 处理拉洗衣机门和推洗衣机门操作"""
 
-    def __init__(self, task_spec: TaskSpec, *, single_task=False):
+    def __init__(self, task_spec: TaskSpec, *, single_task=False, cancel_fd=None):
         self.task_name = task_spec.task_name
         self.prompt = task_spec.prompt
         self.init_position = task_spec.init_position
         self.end_position = task_spec.end_position
         self.arm_type = task_spec.arm_type
+        self.cancel_fd = cancel_fd
         self.control_config = DrawerControlConfig(arm_type=self.arm_type)
+        self.last_open_trajectory_end = 0.0
 
         # 判断是拉洗衣机门还是推洗衣机门
         self.is_pull = True
@@ -206,7 +217,7 @@ class DrawerControl:
     def calculate_arm_displacement(self, current_joints: np.ndarray, initial_joints: np.ndarray) -> float:
         """
         计算机械臂末端位移（简化计算）
-
+        
         实际应用中应使用正运动学计算末端位置
         这里使用关节角度变化的加权和作为近似
         前三个关节对末端位置影响较大，给予更高权重
@@ -233,17 +244,30 @@ class DrawerControl:
             raise ValueError(f"末端XYZ格式错误：{pose['position']}")
         return xyz
 
-    def execute_blocking(self, action_parts, ref_time):
+    def submit_trajectory(self, action_parts, ref_time):
+        """Send one trajectory and check its submission receipt."""
         action = self.g2_control.build_action(action_parts, trajectory_reference_time=ref_time)
+        self.check_cancellation()
+        action["timestamps"] = time.time_ns()
         try:
-            acknowledged = self.g2_control.env.execute_blocking_action(action)
+            acknowledged = self.g2_control.env.execute_action(action)
         except Exception as exc:
-            raise MotionUnknown("未收到机器人轨迹结束回执") from exc
+            raise MotionUnknown("未收到机器人轨迹接收回执") from exc
         if acknowledged is not True:
-            raise MotionUnknown("机器人未确认轨迹完成")
+            raise MotionUnknown("机器人未接收轨迹")
+        if self.task_name == OPEN_WASHER_TASK:
+            self.last_open_trajectory_end = time.monotonic() + ref_time
+
+    def check_cancellation(self):
+        if self.cancel_fd is not None and select.select([self.cancel_fd], [], [], 0)[0]:
+            if os.read(self.cancel_fd, 1) == OPERATOR_FINISH_BYTE:
+                if self.task_name == OPEN_WASHER_TASK:
+                    time.sleep(max(0.0, self.last_open_trajectory_end - time.monotonic()))
+                raise OperatorFinished
+            raise MotionUnknown("已取消本次洗衣机任务，停止继续提交轨迹")
 
     def run_single_task(self, run_seconds):
-        """Prepare at the washer, run bounded inference, and preserve the resulting pose."""
+        """Prepare at the washer and run cancellable model inference."""
         positions = self.init_position
         if isinstance(positions, dict):
             positions = [positions]
@@ -257,17 +281,20 @@ class DrawerControl:
                 "head": [position["head"]],
                 "waist": [position["waist"]],
             }
-            if self.task_name in {"右臂开洗衣机门", "左臂放浅蓝色衣服进洗衣机"}:
+            if self.task_name in {OPEN_WASHER_TASK, "左臂放浅蓝色衣服进洗衣机"}:
                 # The left hand may already be holding the garment.
                 del parts["left_gripper"]
-            self.execute_blocking(parts, 2.0)
-        return self.inf_loop(deadline=time.monotonic() + run_seconds)
+            self.submit_trajectory(parts, 2.0)
+            time.sleep(2.0)
+        deadline = None if run_seconds is None else time.monotonic() + run_seconds
+        return self.inf_loop(deadline=deadline, single_task=True)
 
-    def inf_loop(self, *, deadline=None):
-        """Run the legacy loop or finish after the bounded task's last acknowledged chunk."""
+    def inf_loop(self, *, deadline=None, single_task=False):
+        """Run model inference until the configured end or an explicit stop."""
         logger.info("使用 prompt: %s", self.prompt)
         if deadline is None:
-            logger.info("临时无限循环模式：不会自动判定成功，按 Ctrl+C 中断")
+            logger.info("持续推理，等待取消" if single_task
+                        else "临时无限循环模式：不会自动判定成功，按 Ctrl+C 中断")
         i = 0
         ref_time = self.control_config.ref_time
 
@@ -297,11 +324,13 @@ class DrawerControl:
                 logger.info(f"State 维度: {len(state)}, 右臂状态: {state[8:15]}, 右夹爪: {state[15]}")
 
             # 调用推理
+            if single_task:
+                self.check_cancellation()
             infer_start = time.time()
             response = np.asarray(self.web_policy.infer(payload)["actions"])
             logger.info(f"第{i}步推理耗时: {(time.time() - infer_start) * 1000:.1f} ms")
 
-            if deadline is not None and (response.shape != (30, 16) or not np.isfinite(response).all()):
+            if single_task and (response.shape != (30, 16) or not np.isfinite(response).all()):
                 raise ValueError(f"模型动作格式无效: {response.shape}")
 
             # 解析动作
@@ -320,21 +349,22 @@ class DrawerControl:
                 "right_arm": right_arm.tolist(),
                 "right_gripper": right_gripper.tolist(),
             }
-            if deadline is None:
+            if not single_task:
                 self.g2_control.execute(parts, ref_times=ref_time)
             else:
-                if self.arm_type != "both_arms":
+                if self.task_name != OPEN_WASHER_TASK and self.arm_type != "both_arms":
                     inactive = "left" if self.arm_type == "right_arm" else "right"
                     del parts[f"{inactive}_arm"], parts[f"{inactive}_gripper"]
-                if time.monotonic() + ref_time >= deadline:
+                if deadline is not None and time.monotonic() + ref_time >= deadline:
                     break
-                self.execute_blocking(parts, ref_time)
+                self.submit_trajectory(parts, ref_time)
 
             i += 1
             if i % 20 == 0:
                 logger.info("已执行%d个推理循环", i)
 
-        logger.info("限时推理结束，机器人已确认 %d 段模型轨迹执行完成", i)
+        if deadline is not None:
+            logger.info("限时推理结束，已提交 %d 段模型轨迹", i)
         return i > 0
 
     def run(self):
@@ -367,9 +397,12 @@ def parse_args() -> argparse.Namespace:
         help="任务名称：right_arm_pull_drawer（拉）、right_arm_push_drawer（推）",
     )
     parser.add_argument("--run-seconds", type=float, help="HomeCare 单步限时模式")
+    parser.add_argument("--cancel-fd", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.run_seconds is not None and not 1 < args.run_seconds < 60:
         parser.error("--run-seconds 必须大于 1 秒且小于 60 秒")
+    if args.cancel_fd is not None and args.cancel_fd < 3:
+        parser.error("--cancel-fd 必须是独立文件描述符")
     return args
 
 
@@ -397,15 +430,18 @@ def main() -> None:
         logger.error(str(e))
         sys.exit(1)
 
-    if args.run_seconds is None:
+    if args.run_seconds is None and args.cancel_fd is None:
         sys.exit(0 if DrawerControl(task_spec).run() else 1)
 
     drawer_control = None
     try:
-        drawer_control = DrawerControl(task_spec, single_task=True)
+        drawer_control = DrawerControl(task_spec, single_task=True, cancel_fd=args.cancel_fd)
         success = drawer_control.run_single_task(args.run_seconds)
+    except OperatorFinished:
+        logger.info("收到本次执行的结束信号，停止提交后续轨迹")
+        sys.exit(OPERATOR_FINISHED_EXIT)
     except (MotionUnknown, KeyboardInterrupt):
-        logger.exception("洗衣机限时任务未确认停止")
+        logger.exception("洗衣机任务未确认停止")
         sys.exit(MOTION_UNKNOWN_EXIT)
     finally:
         if drawer_control is not None:

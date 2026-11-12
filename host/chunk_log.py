@@ -34,7 +34,8 @@ class Transport:
     def __init__(self,host=None,port=None,token_file=None):
         self.host,self.port=host or get_robot_host(),port or load()["collection_port"];self.token_file=Path(token_file or BASE/'session_receiver.token')
     def request(self,method,path,body=None):
-        conn=http.client.HTTPConnection(self.host,self.port,timeout=1 if path=="/api/health" else 20)
+        timeout=1 if path=="/api/health" else 3 if method=="GET" and path.startswith("/api/records?") else 20
+        conn=http.client.HTTPConnection(self.host,self.port,timeout=timeout)
         try:
             token=self.token_file.read_text().strip()
             conn.request(method,path,body=None if body is None else encode(body),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Connection':'close'})
@@ -139,8 +140,8 @@ class Recorder:
             if new:
                 if new[0]['seq']!=self.event_seq+1:raise OSError('episode event log gap')
                 self.write('events',{'events':new,'phase':snapshot['phase']});self.event_seq=new[-1]['seq']
-    def stop_collection(self):
-        if not self.collection_stopped:
+    def stop_collection(self, refresh_barrier=False):
+        if not self.collection_stopped or refresh_barrier:
             self.session = self.uploader.transport.request('POST','/api/sessions/'+self.episode.id+'/stop',{'expected_sequence':self.seq})['session']
             self.collection_stopped = True
 

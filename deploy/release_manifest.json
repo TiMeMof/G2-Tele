@@ -1,12 +1,12 @@
 {
   "host/chunk_log.py": {
-    "bytes": 9049,
-    "sha256": "02ad910f8db50b70884b2c3eee3d7ac99a348c01b8f64ffe776ab3ea39af3c9c",
+    "bytes": 9176,
+    "sha256": "9b32b4e27fd289992d45884dfe473ba08d85ea0f122e3796a33f670f2cd5c3ba",
     "previous_sha256": "b7e39b341518c5a41de4795e9d97c8f5351ff6bd799da5171a908ac0f68c3dfd"
   },
   "host/episode_control.py": {
-    "bytes": 20699,
-    "sha256": "2f478a036e596b2c122453346bbfc2fc08eb9c6271ff8b41a518889b9375b73f",
+    "bytes": 22137,
+    "sha256": "64f8678c7f3e327b6e6cdea34c44d5b3cf58bcaa34286ae2acd03cee738d5b5a",
     "previous_sha256": "c7dc8b80281d73bb78f9f50a822a25b22154966c448091e1b89e2194154acecc"
   },
   "host/data_browser.css": {
@@ -15,23 +15,23 @@
     "previous_sha256": "5eedb01995f44aa417373227d13b879991a2e4b5e3d8c4a31d8aa9f011d3b6e5"
   },
   "host/data_browser.js": {
-    "bytes": 24236,
-    "sha256": "09ff98f3607ab31bc04d36e7e476e111e88c3f84bf0a308c927765e031383d7f",
+    "bytes": 24463,
+    "sha256": "04e8100e9b3e341c62774d582ea2e0947f781d7dc9fa16973e1a93ecc788124c",
     "previous_sha256": "1949eaf3e0e605b0af78f1fe1fc9dfb28f9f8c339b96fac92a186641b72aae18"
   },
   "host/intergrated_test.html": {
-    "bytes": 61869,
-    "sha256": "aa0693b602471aed7d975a490b9e2833aa660bbbd39e3270fbf31b10458f6a4d",
+    "bytes": 62414,
+    "sha256": "b7e322890cc5cdfd05e6cf23a109b397f69ca2c76ab302c8140afa6c2c537eab",
     "previous_sha256": "1b5c37c8aac26d7a8f1222d79cbaa75c08d2b513d168b7a59cfb0cbce2143fe1"
   },
   "host/intergrated_test_server.py": {
-    "bytes": 23420,
-    "sha256": "2f9c62c89a8c96dd63229e0630d783c82e06f471bf0c10d3d13f62243a3dc441",
+    "bytes": 43364,
+    "sha256": "181b2322c9826774adddbdc585cdf90baf44fbec737d58208f662bbdb68c8b20",
     "previous_sha256": "0ecd3d49cda76c6567e4251b8598bff8ab50ff3ef21fa81ab88bdf6367dcca25"
   },
   "host/takeover_runtime.py": {
-    "bytes": 10594,
-    "sha256": "dd1b6e389085c60df76b03b50a839471000efdd3bda0bdf2603998673c9fb4e4",
+    "bytes": 11925,
+    "sha256": "0d59194fc4e81a1b5fc7e9b4a890b0045441c2b23be34de5a3d09446a3031d08",
     "previous_sha256": "8124e78b227ef3bb4486e74c9ff9d5fe340f0e427c47e99419cc48add285d168"
   },
   "host/washer_adapter.py": {
@@ -40,8 +40,8 @@
     "previous_sha256": "d44b8cc5d44f5163f0c3ab8cecebf29eae8814adbcd96a935180ab358e9da839"
   },
   "host/washer_tasks.py": {
-    "bytes": 5700,
-    "sha256": "984cc88eba7d6dc3bc800457aa3cf874d4650e6d3011f99adcd69f9b40b40682",
+    "bytes": 7506,
+    "sha256": "892d6e33ab5430cfc0f2b5d77b910fb03b0b58e27a03148f25ad16bf67c71adf",
     "previous_sha256": "6ebab44b470a5b2791de9aae6e0bb79a7eb1a1ca736f6a8946332ad38e9f73d8"
   },
   "host/vr_proxy.py": {
@@ -60,9 +60,14 @@
     "previous_sha256": null
   },
   "host/remote_records.py": {
-    "bytes": 2746,
-    "sha256": "2cfca522c9e67416d706b5c69b0b7136d02677386eb8cebb65cc22b153e5b82b",
+    "bytes": 2717,
+    "sha256": "396bfb2c1af1ed49f063b7e25d3c80cb3b5dbe5caba1e41f1eaaed8c1e1cfe93",
     "previous_sha256": null
+  },
+  "host/record_browser.py": {
+    "bytes": 16294,
+    "sha256": "04c5cb25eddb4589532762cf5642121ae26b616a477e8e7421dbf5e8c233af72",
+    "previous_sha256": "12e767c2abddebbb77024551204b2de194d24017eefe8b47001f889a48a55e77"
   },
   "host/web_config.py": {
     "bytes": 2278,
@@ -77,6 +82,16 @@
   "host/web_restart.py": {
     "bytes": 10342,
     "sha256": "31516619fce91b7c977aaed41221b235d9ac17d484dd1327407131658a9eaa01",
+    "previous_sha256": null
+  },
+  "host/episode_review.py": {
+    "bytes": 4270,
+    "sha256": "d7ce25fc2abe21ce934b016a68c766a9b4e55f1d46b22930eb38b9db0a2eb7c8",
+    "previous_sha256": null
+  },
+  "host/episode_review.js": {
+    "bytes": 9164,
+    "sha256": "22c7a9bdacdf60b7d7a8a947621004e889ed5253b172e6858d639e89e7e137a4",
     "previous_sha256": null
   },
   "robot/collection_server.py": {
@@ -95,8 +110,8 @@
     "previous_sha256": null
   },
   "robot/record_view.py": {
-    "bytes": 15427,
-    "sha256": "12e767c2abddebbb77024551204b2de194d24017eefe8b47001f889a48a55e77",
+    "bytes": 15615,
+    "sha256": "4af1feea946a7caac29ea586a267ee92d07eee8e47c16d9a984edb25df2d7d83",
     "previous_sha256": null
   },
   "robot/vr_monitor.py": {

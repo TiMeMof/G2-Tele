@@ -1,5 +1,6 @@
 """Explicit washer allowlist; each episode resolves its own configured policy."""
 import json
+import math
 import os
 import socket
 from pathlib import Path
@@ -10,28 +11,64 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 from network_config import get_policy_host, configure_proxy_bypass
 
-TASK_IDS = ('双臂关洗衣机门', '左臂放浅蓝色衣服进洗衣机', '右臂开洗衣机门', '左臂从洗衣机拿衣服')
-HOMECARE_ROBOT_HOST = '192.168.50.61'
+OPEN_WASHER_TASK = '右臂开洗衣机门'
+TASK_IDS = ('双臂关洗衣机门', '左臂放浅蓝色衣服进洗衣机', OPEN_WASHER_TASK, '左臂从洗衣机拿衣服')
+HOMECARE_ROBOT_HOST = '192.168.50.118'
 MOTION_UNKNOWN_EXIT = 2
+OPERATOR_FINISHED_EXIT = 3
+OPERATOR_FINISH_BYTE = b"F"
+HOMECARE_POLICY_HOST = '192.168.50.113'
+SETTLE_BUDGET_S = 3.0
+MANAGED_REPLY_MARGIN_S = 2.0
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config_V2_0.json'
 
 
 def single_task_config():
-    """Opt in only after per-task timings and blocking control are validated."""
+    """Validate client-owned or explicitly time-bounded washer execution."""
     raw = os.environ.get("WASHER_SINGLE_TASK_CONFIG")
     if raw is None:
         return None
     config = json.loads(raw)
-    if not isinstance(config, dict) or set(config) != {"runSeconds", "maxDurationS"}:
-        raise ValueError("限时洗衣机配置必须包含 runSeconds 和 maxDurationS")
-    durations = config["runSeconds"]
-    limit = config["maxDurationS"]
-    if (not isinstance(durations, dict) or set(durations) != set(TASK_IDS)
-            or any(type(seconds) not in (int, float) or not 1 < seconds < 60
-                   for seconds in durations.values())
-            or type(limit) not in (int, float) or not max(durations.values()) + 2 < limit < 60):
-        raise ValueError("须配置四项运行时间，并为准备、通信和收尾留出余量；总时限须小于 60 秒")
+    if not isinstance(config, dict) or set(config) not in (
+        {"runSeconds", "maxDurationS"}, {"runSeconds", "maxDurationS", "managedPolicy"},
+        {"maxDurationS", "managedPolicy"}, {"managedPolicy"},
+    ):
+        raise ValueError("限时洗衣机配置字段无效")
+    client_owned = "maxDurationS" not in config
+    limit = config.get("maxDurationS")
+    if not client_owned and (type(limit) not in (int, float) or not 3 < limit < 60):
+        raise ValueError("洗衣机子进程兜底时限无效")
+    if "runSeconds" in config:
+        durations = config["runSeconds"]
+        if (not isinstance(durations, dict) or set(durations) != set(TASK_IDS)
+                or any(type(seconds) not in (int, float) or not 1 < seconds < 60
+                       for seconds in durations.values())
+                or max(durations.values()) + 2 >= limit):
+            raise ValueError("须配置四项运行时间，并为准备、通信和收尾留出余量")
+    if "managedPolicy" in config:
+        policy = config["managedPolicy"]
+        keys = {"enabled", "timingBasis", "openpiDir", "pythonPath", "startupTimeoutS", "motionLatchPath"}
+        timing_bases = ("client-owned",) if client_owned else ("provisional-supervised", "calibrated")
+        if (not isinstance(policy, dict) or set(policy) != keys
+                or type(policy["enabled"]) is not bool
+                or policy["timingBasis"] not in timing_bases
+                or any(not isinstance(policy[key], str) or not Path(policy[key]).is_absolute()
+                       for key in ("openpiDir", "pythonPath", "motionLatchPath"))
+                or type(policy["startupTimeoutS"]) not in (int, float)
+                or not math.isfinite(policy["startupTimeoutS"])
+                or not 1 <= policy["startupTimeoutS"] <= 90
+                or (not client_owned and
+                    policy["startupTimeoutS"] + limit + 2 * SETTLE_BUDGET_S
+                    + 3.0 + MANAGED_REPLY_MARGIN_S >= 120)):
+            raise ValueError("HomeCare 洗衣机独立计时或模型配置无效")
     return config
+
+
+def managed_max_duration(config, *, cleanup_budget_s):
+    return (
+        config["managedPolicy"]["startupTimeoutS"] + config["maxDurationS"]
+        + 2 * SETTLE_BUDGET_S + cleanup_budget_s + MANAGED_REPLY_MARGIN_S
+    )
 
 
 def policy_for(task_id, config_path=None):

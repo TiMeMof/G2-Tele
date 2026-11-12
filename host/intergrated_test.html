@@ -277,7 +277,7 @@
                 <button id="episodeResume" class="btn-primary" onclick="episodeCommand('resume')">继续推理</button>
                 <button id="episodeReset" class="btn-secondary" onclick="episodeCommand('reset')">复位</button>
                 <button id="episodeSuccess" class="btn-secondary" onclick="episodeCommand('success')">成功</button>
-                <button id="episodeFailure" class="btn-primary" onclick="document.getElementById('failureForm').hidden=false">失败</button>
+                <button id="episodeFailure" class="btn-primary" onclick="EpisodeReview.open()">失败</button>
             </div>
             <form id="failureForm" hidden onsubmit="event.preventDefault();episodeCommand('failure')">
                 <p>选择失败原因（可多选）：</p><div id="failureChoices" style="display:flex;gap:14px;flex-wrap:wrap;margin:12px 0"></div>
@@ -300,6 +300,7 @@
     </div>
 
     <script src="/data_browser.js"></script>
+    <script src="/episode_review.js"></script>
     <script>
         let vrTesting = false;
         let vrGeneration = 0;
@@ -539,6 +540,8 @@
                 document.getElementById('episodeFailure').disabled=episodeBusy || !paused || ep.inflight || !serverAvailable;
                 document.getElementById('failureSubmit').disabled=episodeBusy || !paused || ep.inflight || !serverAvailable;
                 if (['succeeded','failed'].includes(ep.phase)) document.getElementById('failureForm').hidden=true;
+                const reviewing=EpisodeReview.render(ep);
+                for(const key of ['episodeResume','episodeReset','episodeSuccess','episodeFailure']) document.getElementById(key).hidden=reviewing;
             } else {
                 const item=legacyInterventions[taskId]; if (!item || item.id !== id) return;
                 document.getElementById('episodeStatus').textContent=item.pending ? '正在中止…' : item.result ? (item.result.success ? '已标注成功' : '已标注失败') : item.stopped ? '已中止 · 等待人工判定' : '中止未确认';
@@ -612,14 +615,19 @@
                 configBusy = false; updateSettingsUi(); renderTasks();
             }
         }
-        function selectTab(tab) {
+        function viewCurrentEpisodeData() {
+            const id=dialogContext?.kind==='episode'?dialogContext.id:serverState.episode?.id;
+            if(!id)return;
+            closeInterventionDialog();selectTab('data',false);DataBrowser.openEpisode(id);
+        }
+        function selectTab(tab, refreshData=true) {
             const data = tab === 'data';
             document.getElementById('runPanel').hidden = data;
             document.getElementById('dataPanel').hidden = !data;
             document.getElementById('runTab').setAttribute('aria-selected', String(!data));
             document.getElementById('dataTab').setAttribute('aria-selected', String(data));
             history.replaceState(null, '', data ? '#data' : '#run');
-            if (data) DataBrowser.refresh();
+            if (data && refreshData) DataBrowser.refresh();
         }
         document.getElementById('settingsForm').addEventListener('input', () => {
             configDirty = true;
@@ -683,7 +691,7 @@
                 state.status = serverState.operation === 'restore' ? '正在复位...' : '正在运行...';
             }
             const ep=serverState.episode?.taskId===taskId && !legacyInterventions[taskId] && !(taskStates[taskId]?.running && serverState.operation!=='takeover') ? serverState.episode : null;
-            const needsDecision=ep && ['paused','awaiting_result'].includes(ep.phase);
+            const needsDecision=ep && (['paused','awaiting_result'].includes(ep.phase) || ep.review_pending);
             if (ep) {
                 state.status=`${episodeStateText(ep)} · 接管 ${ep.interventions}/${ep.max_interventions ?? '不限'} 轮`;
                 if (['succeeded','failed'].includes(ep.phase)) {state.running=false;state.success=ep.phase==='succeeded';}

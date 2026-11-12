@@ -69,6 +69,8 @@ def build_episode(episode_id, records, receipts=0, warnings=None):
     elapsed_records = [elapsed(r.get('recorded_114')) for r in records]
     duration = max([0.0]+[max(0,e['elapsed_s']) for e in events]+[t for t in elapsed_records if t is not None and t >= 0])
     if result: duration = max(duration, number(result.get('duration_s'), 0))
+    review_start=next((e['elapsed_s'] for e in events if e['kind']=='review_started'),None)
+    if review_start is not None:duration=min(duration,max(0,review_start))
     outcome = ('success' if result.get('success') is True else 'failure') if result else ('incomplete' if ends else 'ongoing')
 
     segments, rounds = [], []
@@ -86,7 +88,7 @@ def build_episode(episode_id, records, receipts=0, warnings=None):
             rounds.append(active_round)
         elif k=='paused' and phase!='human':next_phase='paused'
         elif k=='result_required' and phase!='human':next_phase='paused'
-        elif k=='result_decided':next_phase='ended'
+        elif k in {'result_decided','review_started'}:next_phase='ended'
         if next_phase!=phase:
             if t>since:segments.append({'start_s':since,'end_s':t,'kind':phase,'label':phase_labels[phase],'round':round_id if phase=='human' else None})
             if phase=='human' and active_round:
@@ -170,6 +172,7 @@ def build_episode(episode_id, records, receipts=0, warnings=None):
 class RecordBrowser:
     def __init__(self, root):
         self.root=Path(root).resolve();self.lock=threading.RLock();self.cache=OrderedDict()
+        self.summary_cache=OrderedDict()
 
     def folder(self, episode_id):
         if not isinstance(episode_id,str) or not ID.fullmatch(episode_id):raise ValueError('无效任务记录ID')
@@ -178,7 +181,7 @@ class RecordBrowser:
         if not path.is_dir():raise FileNotFoundError('记录不存在')
         return path
 
-    def _load(self, episode_id):
+    def _load(self, episode_id, summary_only=False):
         folder=self.folder(episode_id)
         entries=[];signature=[];size=0;receipts=set();warnings=[]
         for p in folder.iterdir():
@@ -192,6 +195,10 @@ class RecordBrowser:
             if len(entries)>MAX_RECORDS or size>MAX_EPISODE_BYTES:raise ValueError('记录过大，超出当前浏览上限')
         signature=tuple(sorted(signature))
         with self.lock:
+            summary=self.summary_cache.get(episode_id)
+            if summary_only and summary and summary[0]==signature:
+                self.summary_cache.move_to_end(episode_id)
+                return summary[1],None,None
             cached=self.cache.get(episode_id)
             if cached and cached[0]==signature:
                 self.cache.move_to_end(episode_id);return cached[1:]
@@ -205,18 +212,20 @@ class RecordBrowser:
                 except (OSError,ValueError,TypeError,AttributeError):warnings.append('部分记录损坏或格式无效，已跳过')
             ack=sum(1 for r in records if r['record_id'] in receipts)
             summary,detail=build_episode(episode_id,records,ack,warnings)
+            self.summary_cache[episode_id]=(signature,summary)
+            self.summary_cache.move_to_end(episode_id)
+            while len(self.summary_cache)>5000:self.summary_cache.popitem(last=False)
             self.cache[episode_id]=(signature,summary,detail,records)
             while len(self.cache)>8:self.cache.popitem(last=False)
             return summary,detail,records
 
-    def listing(self, params):
+    def all_summaries(self, params):
         def query(key):return params.get(key,[''])[0].strip()
-        limit=max(1,min(100,int(query('limit') or 50)));offset=max(0,int(query('offset') or 0))
         items=[];errors=[]
         folders=[] if not self.root.exists() else [p for p in self.root.iterdir() if ID.fullmatch(p.name) and p.is_dir() and not p.is_symlink()]
         for folder in folders:
             try:
-                summary,_,_=self._load(folder.name)
+                summary,_,_=self._load(folder.name,summary_only=True)
                 if query('task') and query('task').casefold() not in summary['task_id'].casefold():continue
                 if query('outcome') and query('outcome')!=summary['outcome']:continue
                 if query('human')=='yes' and not summary['interventions']:continue
@@ -229,7 +238,13 @@ class RecordBrowser:
                 items.append(summary)
             except (OSError,ValueError,TypeError,KeyError) as exc:errors.append({'episode_id':folder.name,'message':str(exc)[:160]})
         items.sort(key=lambda x:int(x['started_wall_ns'] or 0),reverse=True)
-        return {'success':True,'records':copy.deepcopy(items[offset:offset+limit]),'total':len(items),'offset':offset,'limit':limit,'errors':errors}
+        return {'success':True,'records':copy.deepcopy(items),'total':len(items),'errors':errors}
+
+    def listing(self, params):
+        limit=max(1,min(100,int(params.get('limit',['50'])[0] or 50)))
+        offset=max(0,int(params.get('offset',['0'])[0] or 0))
+        result=self.all_summaries(params)
+        return {**result,'records':result['records'][offset:offset+limit],'offset':offset,'limit':limit}
 
     def detail(self, episode_id):return {'success':True,'episode':copy.deepcopy(self._load(episode_id)[1])}
 

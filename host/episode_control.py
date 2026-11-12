@@ -5,6 +5,7 @@ Per user contract, pause only suppresses subsequent sends; no cancellation/hold 
 """
 from collections import deque
 import copy
+import json
 import math
 import threading
 import time
@@ -65,6 +66,11 @@ class Episode:
         self.inflight = None
         self.inference_busy = False
         self.initialization_complete = False
+        self.review_started_s = None
+        self.review_saved = False
+        self.review_payload = None
+        self.review_result_queued = False
+        self.review_detail = None
         self.result = None
         self.execution_error = None
         self.events = deque(maxlen=2048)
@@ -302,13 +308,25 @@ class Episode:
                 return self.snapshot()
             if revision != self.revision:
                 raise Conflict('任务状态已变化，请重新确认当前状态')
-            if self.phase in TERMINAL:
+            reopening_review=command=='review' and self.review_started_s is not None and not self.review_saved
+            if self.phase in TERMINAL and not reopening_review:
                 raise Conflict('任务已结束')
             if command == 'pause':
                 self.manual_pause_latched = True
                 self.release_armed = False
                 self.release_since = None
                 self._pause('manual_interrupt')
+            elif command == 'review':
+                if (self.phase not in {'paused','awaiting_result'} and not reopening_review) or self.inflight:
+                    raise Conflict('请先中止任务，并等待正在发送的动作请求结束')
+                if self.review_started_s is None:
+                    self.review_started_s = self.clock()-self.started
+                    self.generation += 1
+                    self.phase = 'awaiting_result'
+                    self.manual_pause_latched = True
+                    self.release_armed = False
+                    self.round_open = False
+                    self._event('review_started', outcome='failure')
             elif command == 'resume':
                 if (self.execution_error or not self.initialization_complete or self.phase != 'paused' or self.limit_exceeded or self.inflight
                         or self.inference_busy or not self._known_idle()):
@@ -341,7 +359,7 @@ class Episode:
                     raise ValueError('说明最长2000字')
                 self.generation += 1
                 self.result = {'success': command == 'success', 'reasons': selected,
-                               'note': note, 'duration_s': self.clock()-self.started,
+                               'note': note, 'duration_s': self.review_started_s if self.review_started_s is not None else self.clock()-self.started,
                                'interventions': self.rounds,
                                'model_independent_success': command == 'success' and self.rounds == 0}
                 self.phase = 'resetting' if command == 'reset' else ('succeeded' if command == 'success' else 'failed')
@@ -363,6 +381,8 @@ class Episode:
     def snapshot(self):
         with self.lock:
             return {'id': self.id, 'taskId': self.task_id, 'phase': self.phase,
+                    'review_started_s':self.review_started_s,'review_pending':self.review_started_s is not None and not self.review_saved,'review_saved':self.review_saved,
+                    'review_submission':json.loads(self.review_payload) if self.review_payload and not self.review_saved else None,
                     'revision': self.revision, 'generation': self.generation,
                     'vr_unknown_policy':VR_UNKNOWN_POLICY, 'vr_health_warning':self.vr_health_warning(),
                     'resume_mode':self.resume_mode, 'release_debounce_ms':300, 'pause_reason': self.pause_reason, 'execution_error':self.execution_error, 'interventions': self.rounds,
@@ -372,7 +392,7 @@ class Episode:
                     'can_resume': not self.execution_error and self.initialization_complete and self.phase == 'paused' and self._known_idle()
                                   and not self.inflight and not self.inference_busy and not self.limit_exceeded,
                     'physical_stop_confirmed': False, 'result': copy.deepcopy(self.result),
-                    'policy': copy.deepcopy(self.policy), 'elapsed_s': self.clock()-self.started,
+                    'policy': copy.deepcopy(self.policy), 'elapsed_s': self.review_started_s if self.review_started_s is not None else self.clock()-self.started,
                     'events': list(copy.deepcopy(self.events)), 'event_count': self.event_count,
                     'persistent_recording': self.recording is not None,
                     'recording':self.recording.status() if self.recording else None}

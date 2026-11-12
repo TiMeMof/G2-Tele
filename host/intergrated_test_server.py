@@ -3,15 +3,22 @@
 
 import json
 import os
+import re
+import select
 import signal
+import socket
 import subprocess
 import sys
 import threading
+from time import monotonic
 import web_config
 import vr_proxy
 from takeover_runtime import Runtime, WasherAdapter, make_recorder
 from episode_control import Conflict
-from washer_tasks import HOMECARE_ROBOT_HOST, MOTION_UNKNOWN_EXIT, TASK_IDS, single_task_config
+from washer_tasks import (
+    HOMECARE_POLICY_HOST, HOMECARE_ROBOT_HOST, MOTION_UNKNOWN_EXIT, OPEN_WASHER_TASK, OPERATOR_FINISHED_EXIT,
+    OPERATOR_FINISH_BYTE, TASK_IDS, managed_max_duration, single_task_config,
+)
 
 takeover = Runtime(vr_proxy.fetch_status, WasherAdapter, recorder_factory=make_recorder)
 from http import HTTPStatus
@@ -64,35 +71,256 @@ process_lock = threading.Lock()
 current_process = None
 current_task_id = None
 current_operation = None
+current_policy_cancel = None
+current_washer_request = None
+current_washer_cancel_fd = None
+current_washer_finish = None
 washer_motion_unknown = False
+washer_request_history = {}
+WASHER_CANCEL_PROTOCOL = "request-id-v1"
+WASHER_REQUEST_TTL_S = 300
+WASHER_REQUEST_HISTORY_LIMIT = 256
+WASHER_OWNER_POLL_S = 0.1
 
 
 def tail_output(text: str, max_lines: int = 80) -> str:
     return "\n".join(text.splitlines()[-max_lines:])
 
 
-def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
-    global current_process, current_task_id, current_operation, washer_motion_unknown
+def managed_washer_readiness(washer_config):
+    try:
+        import homecare_washer_execution as managed
+    except ImportError:
+        return None, "WASHER_MODEL_MANAGER_UNAVAILABLE"
+    return managed, managed.managed_readiness(washer_config)
+
+
+def washer_refusal(task_id, code, *, status=HTTPStatus.CONFLICT, motion_state="not_started"):
+    return status, {
+        "success": False, "taskId": task_id, "returnCode": 1,
+        "motionState": motion_state, "message": code,
+    }
+
+
+def valid_washer_request_id(request_id):
+    return isinstance(request_id, str) and re.fullmatch(r"[0-9a-f]{32}", request_id) is not None
+
+
+def prune_washer_requests():
+    # Only under process_lock. Never evict a live attempt or an unexpired cancellation.
+    now = monotonic()
+    for request_id, (_, _, expires) in tuple(washer_request_history.items()):
+        if request_id != current_washer_request and expires <= now:
+            del washer_request_history[request_id]
+
+
+def remember_washer_request(request_id, task_id, state):
+    washer_request_history[request_id] = (task_id, state, monotonic() + WASHER_REQUEST_TTL_S)
+
+
+def prior_washer_request(task_id, request_id):
+    prior = washer_request_history.get(request_id)
+    if prior is None:
+        return None
+    if prior[:2] == (task_id, "cancelled"):
+        return washer_refusal(task_id, "WASHER_CANCELLED_BEFORE_SUBMIT")
+    return washer_refusal(task_id, "WASHER_REQUEST_ID_REUSED", motion_state="unknown")
+
+
+def close_washer_cancel_fd():
+    global current_washer_cancel_fd
+    if current_washer_cancel_fd is not None:
+        os.close(current_washer_cancel_fd)
+        current_washer_cancel_fd = None
+
+
+def request_active_washer_cancel():
+    # Called with process_lock held and the active request already matched.
+    if not current_policy_cancel.is_set():
+        current_policy_cancel.set()
+        close_washer_cancel_fd()
+        if current_process is not None:
+            try:
+                current_process.send_signal(signal.SIGINT)
+            except OSError:
+                # The closed pipe also prevents the next cooperative submission.
+                pass
+
+
+def enable_washer_owner_keepalive(connection):
+    # Detect a vanished peer even if the connection did not close cleanly.
+    connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    for option, value in ((socket.TCP_KEEPIDLE, 5), (socket.TCP_KEEPINTVL, 2), (socket.TCP_KEEPCNT, 3)):
+        connection.setsockopt(socket.IPPROTO_TCP, option, value)
+
+
+def washer_owner_lost(connection, wait=0):
+    try:
+        readable, _, failed = select.select([connection], [], [connection], wait)
+    except (OSError, ValueError):
+        return True
+    # After the POST body, the client must only wait for its response.
+    # EOF, an error or any unexpected inbound bytes ends this ownership.
+    return bool(readable or failed)
+
+
+def watch_washer_owner(connection, request_id, done):
+    while not done.is_set():
+        if washer_owner_lost(connection, WASHER_OWNER_POLL_S):
+            with process_lock:
+                entry = washer_request_history.get(request_id)
+                if request_id == current_washer_request and entry and entry[1] == "running":
+                    request_active_washer_cancel()
+            return
+
+
+def communicate_client_owned(process, cancelled):
+    # Polling has no action deadline. Only loss of ownership or a scoped
+    # cancellation starts the bounded local subprocess cleanup.
+    while not cancelled.is_set():
+        try:
+            stdout, stderr = process.communicate(timeout=WASHER_OWNER_POLL_S)
+        except subprocess.TimeoutExpired:
+            continue
+        return stdout, stderr, process.returncode
+    try:
+        stdout, stderr = process.communicate(timeout=1)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+    return stdout, stderr, MOTION_UNKNOWN_EXIT
+
+
+def cancel_washer_task(task_id, request_id, client_ip):
+    if client_ip != HOMECARE_ROBOT_HOST:
+        return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
+    if task_id not in TASK_IDS or not valid_washer_request_id(request_id):
+        return washer_refusal(task_id, "WASHER_CANCEL_REQUEST_INVALID", status=HTTPStatus.BAD_REQUEST)
+    try:
+        config = single_task_config()
+    except (OSError, ValueError):
+        return washer_refusal(task_id, "WASHER_CONFIG_INVALID")
+    if not config or not config.get("managedPolicy", {}).get("enabled"):
+        return washer_refusal(task_id, "MANAGED_WASHER_DISABLED")
+    with process_lock:
+        prune_washer_requests()
+        entry = washer_request_history.get(request_id)
+        if entry and (entry[0] != task_id or entry[1] == "finished"):
+            return washer_refusal(task_id, "WASHER_CANCEL_REQUEST_MISMATCH_OR_FINISHED")
+        if request_id == current_washer_request:
+            motion_state = "unknown" if current_process is not None else "not_started"
+            request_active_washer_cancel()
+        else:
+            if entry is None and len(washer_request_history) >= WASHER_REQUEST_HISTORY_LIMIT:
+                return washer_refusal(task_id, "WASHER_REQUEST_HISTORY_FULL")
+            remember_washer_request(request_id, task_id, "cancelled")
+            motion_state = "not_started"
+    return HTTPStatus.ACCEPTED, {
+        "success": True, "taskId": task_id, "requestId": request_id,
+        "motionState": motion_state, "message": "WASHER_CANCEL_REQUESTED",
+    }
+
+
+def finish_washer_task(task_id, request_id, client_ip, completion_source=None):
+    if client_ip != HOMECARE_ROBOT_HOST:
+        return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
+    if task_id not in TASK_IDS or not valid_washer_request_id(request_id):
+        return washer_refusal(task_id, "WASHER_FINISH_REQUEST_INVALID", status=HTTPStatus.BAD_REQUEST)
+    expected_source = "client_deadline" if task_id == OPEN_WASHER_TASK else None
+    if completion_source != expected_source:
+        return washer_refusal(task_id, "WASHER_FINISH_SOURCE_MISMATCH")
+    with process_lock:
+        entry = washer_request_history.get(request_id)
+        if (request_id != current_washer_request or not entry or entry[:2] != (task_id, "running")
+                or current_washer_finish is None or current_process is None
+                or current_policy_cancel.is_set()):
+            return washer_refusal(task_id, "WASHER_FINISH_REQUEST_MISMATCH_OR_FINISHED")
+        if not current_washer_finish.is_set():
+            try:
+                os.write(current_washer_cancel_fd, OPERATOR_FINISH_BYTE)
+            except OSError:
+                return washer_refusal(task_id, "WASHER_FINISH_RUNNER_UNAVAILABLE", motion_state="unknown")
+            current_washer_finish.set()
+            close_washer_cancel_fd()
+    return HTTPStatus.ACCEPTED, {
+        "success": True, "taskId": task_id, "requestId": request_id,
+        "message": "WASHER_FINISH_REQUESTED",
+    }
+
+
+def run_robot_task(
+    task_id: str, *, single_task=False, client_ip=None, request_id=None, owner_connection=None,
+) -> tuple[int, dict]:
+    global current_process, current_task_id, current_operation, current_policy_cancel
+    global current_washer_request, current_washer_cancel_fd, current_washer_finish
+    global washer_motion_unknown
 
     if not isinstance(task_id, str) or task_id not in TASKS:
         return HTTPStatus.BAD_REQUEST, {"success": False, "message": f"未知任务: {task_id}"}
+    if request_id is not None and (not single_task or not valid_washer_request_id(request_id)):
+        return washer_refusal(task_id, "WASHER_REQUEST_ID_INVALID", status=HTTPStatus.BAD_REQUEST)
+    if request_id is not None and client_ip != HOMECARE_ROBOT_HOST:
+        return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
+    if request_id is not None:
+        with process_lock:
+            prune_washer_requests()
+            prior = prior_washer_request(task_id, request_id)
+        if prior is not None:
+            return prior
     if not run_lock.acquire(blocking=False):
+        if request_id is not None:
+            with process_lock:
+                prior = prior_washer_request(task_id, request_id)
+            if prior is not None:
+                return prior
+            return washer_refusal(task_id, "WASHER_SERVICE_BUSY")
         return HTTPStatus.CONFLICT, {"success": False, "message": "已有测试正在运行，请等待完成"}
 
+    managed = None
+    policy_cancel = None
+    client_owned = False
     try:
         config = web_config.load()
         if takeover.active():
             run_lock.release()
+            if request_id is not None:
+                return washer_refusal(task_id, "WASHER_SERVICE_BUSY")
             return HTTPStatus.CONFLICT, {"success": False, "message": "人工接管任务尚未结束"}
         washer_config = single_task_config() if single_task else None
-        if single_task and (task_id not in TASK_IDS or not washer_config
-                            or config["human_takeover_enabled"] or washer_motion_unknown):
+        managed_configured = washer_config is not None and "managedPolicy" in washer_config
+        if request_id is not None and not managed_configured:
             run_lock.release()
-            return HTTPStatus.CONFLICT, {
-                "success": False, "taskId": task_id, "returnCode": 1,
-                "message": "限时洗衣机模式不可用，请检查配置或确认上一次轨迹已停止",
-            }
-        if config["human_takeover_enabled"]:
+            return washer_refusal(task_id, "WASHER_CANCEL_PROTOCOL_UNAVAILABLE")
+        if single_task and (task_id not in TASK_IDS or not washer_config or washer_motion_unknown
+                            or (config["human_takeover_enabled"] and not managed_configured)):
+            run_lock.release()
+            return washer_refusal(task_id, "限时洗衣机模式不可用，请检查配置或确认上一次轨迹已停止")
+        if managed_configured:
+            if client_ip != HOMECARE_ROBOT_HOST:
+                run_lock.release()
+                return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED",
+                                      status=HTTPStatus.FORBIDDEN)
+            if "runSeconds" not in washer_config and request_id is None:
+                run_lock.release()
+                return washer_refusal(task_id, "WASHER_REQUEST_ID_INVALID", status=HTTPStatus.BAD_REQUEST)
+            client_owned = "maxDurationS" not in washer_config
+            if client_owned:
+                if owner_connection is None:
+                    run_lock.release()
+                    return washer_refusal(task_id, "WASHER_OWNER_CONNECTION_REQUIRED")
+                enable_washer_owner_keepalive(owner_connection)
+                if washer_owner_lost(owner_connection):
+                    run_lock.release()
+                    return washer_refusal(task_id, "WASHER_OWNER_CONNECTION_LOST")
+            managed, status = managed_washer_readiness(washer_config)
+            if status != "READY":
+                run_lock.release()
+                return washer_refusal(task_id, status)
+            policy_cancel = threading.Event()
+        elif config["human_takeover_enabled"]:
             try:
                 return HTTPStatus.OK, takeover.start(task_id, config)
             except (Conflict, ValueError, OSError) as exc:
@@ -101,10 +329,26 @@ def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
                 run_lock.release()
     except (OSError, ValueError) as exc:
         run_lock.release()
+        if request_id is not None:
+            return washer_refusal(task_id, "WASHER_CONFIG_INVALID", status=HTTPStatus.BAD_REQUEST)
         return HTTPStatus.BAD_REQUEST, {"success": False, "message": f"无法读取配置: {exc}"}
+    finish_requested = threading.Event() if client_owned else None
     with process_lock:
+        if request_id is not None:
+            prune_washer_requests()
+            prior = prior_washer_request(task_id, request_id)
+            if prior is not None:
+                run_lock.release()
+                return prior
+            if len(washer_request_history) >= WASHER_REQUEST_HISTORY_LIMIT:
+                run_lock.release()
+                return washer_refusal(task_id, "WASHER_REQUEST_HISTORY_FULL")
+            remember_washer_request(request_id, task_id, "running")
+            current_washer_request = request_id
         current_task_id = task_id
         current_operation = "washer-single-task" if single_task else "run"
+        current_policy_cancel = policy_cancel
+        current_washer_finish = finish_requested
 
     task = TASKS[task_id]
     # 默认使用异步版本（高频闭环，约 6~7 Hz）
@@ -131,7 +375,7 @@ def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
         ]
     elif task["type"] == "washer":
         command = [sys.executable, str(BASE_DIR / "run_washer.py"), "--task", task_id]
-        if single_task:
+        if single_task and "runSeconds" in washer_config:
             command += ["--run-seconds", str(washer_config["runSeconds"][task_id])]
     else:  # drawer type
         command = [
@@ -169,36 +413,109 @@ def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
     #     ]
     # ========================================
 
+    model = None
+    motion_claimed = False
+    owner_done = None
+    owner_watcher = None
     try:
+        if client_owned:
+            owner_done = threading.Event()
+            owner_watcher = threading.Thread(
+                target=watch_washer_owner, args=(owner_connection, request_id, owner_done),
+                name="washer-owner-connection", daemon=True,
+            )
+            owner_watcher.start()
+        if managed is not None:
+            model = managed.model_runner(washer_config)
+            try:
+                model.start(
+                    task_id, (task_id,), HOMECARE_POLICY_HOST,
+                    monotonic() + washer_config["managedPolicy"]["startupTimeoutS"], policy_cancel,
+                    check_gpu_memory=False,
+                )
+            except managed.WasherPolicyError as exc:
+                return washer_refusal(task_id, str(exc))
+            if not managed.wait_for_stopped(cancelled=policy_cancel.is_set):
+                return washer_refusal(task_id, "WASHER_CANCELLED_BEFORE_SUBMIT" if policy_cancel.is_set()
+                                      else "WASHER_PREPARATION_MOTION_NOT_SETTLED")
         print(f"[INFO] 开始测试: {task['name']} ({task_id})", flush=True)
-        process = subprocess.Popen(
-            command,
-            cwd=BASE_DIR,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=(os.name != "nt"),
-        )
         with process_lock:
+            if managed is not None:
+                if client_owned and washer_owner_lost(owner_connection):
+                    request_active_washer_cancel()
+                if policy_cancel.is_set():
+                    return washer_refusal(task_id, "WASHER_CANCELLED_BEFORE_SUBMIT")
+                managed.claim_motion(washer_config, task_id)
+                motion_claimed = True
+            try:
+                inherited_fds = ()
+                if request_id is not None:
+                    read_fd, current_washer_cancel_fd = os.pipe()
+                    inherited_fds = (read_fd,)
+                    command += ["--cancel-fd", str(read_fd)]
+                process = subprocess.Popen(
+                    command, cwd=BASE_DIR, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    start_new_session=(os.name != "nt"),
+                    pass_fds=inherited_fds,
+                )
+            except OSError:
+                if motion_claimed:
+                    managed.clear_motion(washer_config)
+                    motion_claimed = False
+                raise
+            finally:
+                for fd in inherited_fds:
+                    os.close(fd)
             current_process = process
             current_task_id = task_id
 
+        completion_source = None
         if single_task:
-            try:
-                stdout, stderr = process.communicate(timeout=washer_config["maxDurationS"])
-            except subprocess.TimeoutExpired:
-                process.kill()
-                stdout, stderr = process.communicate()
-                return_code = MOTION_UNKNOWN_EXIT
+            if client_owned:
+                stdout, stderr, return_code = communicate_client_owned(process, policy_cancel)
+                if return_code == OPERATOR_FINISHED_EXIT:
+                    with process_lock:
+                        finished = finish_requested.is_set()
+                    if finished:
+                        completion_source = "client_deadline" if task_id == OPEN_WASHER_TASK else "operator"
+                        return_code = 0
             else:
-                return_code = process.returncode
+                try:
+                    stdout, stderr = process.communicate(timeout=washer_config["maxDurationS"])
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    try:
+                        stdout, stderr = process.communicate(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        stdout, stderr = "", ""
+                    return_code = MOTION_UNKNOWN_EXIT
+                else:
+                    return_code = process.returncode
+            if managed is not None:
+                if return_code == 0 and managed.wait_for_stopped(cancelled=policy_cancel.is_set):
+                    cleanup_ok = model.close()
+                    model = None
+                    with process_lock:
+                        if cleanup_ok and not policy_cancel.is_set():
+                            managed.clear_motion(washer_config)
+                            motion_claimed = False
+                            if request_id is not None:
+                                remember_washer_request(request_id, task_id, "finished")
+                        else:
+                            return_code = MOTION_UNKNOWN_EXIT
+                else:
+                    return_code = MOTION_UNKNOWN_EXIT
             if return_code == MOTION_UNKNOWN_EXIT or return_code < 0:
                 with process_lock:
                     washer_motion_unknown = True
+                output = tail_output((stdout or "") + "\n" + (stderr or ""))
+                diagnostic = tail_output(output, max_lines=12)[-2400:]
+                print(f"[WASHER] {task_id} motion unknown (exit={return_code})\n{diagnostic}", flush=True)
                 return HTTPStatus.GATEWAY_TIMEOUT, {
                     "success": False, "taskId": task_id, "returnCode": return_code,
                     "motionState": "unknown", "message": "未确认轨迹结束，后续洗衣机限时任务已锁定",
-                    "output": tail_output((stdout or "") + "\n" + (stderr or "")),
+                    "output": output,
                 }
         else:
             stdout, stderr = process.communicate()
@@ -213,19 +530,23 @@ def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
                 "taskId": task_id,
                 "taskName": task["name"],
                 "returnCode": return_code,
-                **({"motionState": "finished"} if single_task and ok else {}),
+                **({"motionState": "finished", "physicalEffectVerified": False} if single_task and ok else {}),
+                **({"completionSource": completion_source} if completion_source and ok else {}),
                 "message": ("轨迹执行已结束，等待后态验证" if single_task and ok
                             else f"{task['name']} 测试{'成功' if ok else '失败'}"),
                 "output": output,
             },
         )
     except Exception as exc:
-        if single_task and current_process is not None:
+        if single_task and (current_process is not None or motion_claimed):
             with process_lock:
                 washer_motion_unknown = True
-            if current_process.poll() is None:
-                current_process.kill()
-                current_process.communicate()
+            if current_process is not None and current_process.poll() is None:
+                try:
+                    current_process.kill()
+                    current_process.wait(timeout=1)
+                except (OSError, subprocess.SubprocessError):
+                    pass
             return HTTPStatus.INTERNAL_SERVER_ERROR, {
                 "success": False, "taskId": task_id, "returnCode": MOTION_UNKNOWN_EXIT,
                 "motionState": "unknown", "message": f"未确认轨迹结束: {exc}",
@@ -238,11 +559,25 @@ def run_robot_task(task_id: str, *, single_task=False) -> tuple[int, dict]:
             "output": "",
         }
     finally:
-        with process_lock:
-            current_process = None
-            current_task_id = None
-            current_operation = None
-        run_lock.release()
+        try:
+            if model is not None:
+                model.close()
+        finally:
+            if owner_done is not None:
+                owner_done.set()
+                if owner_watcher is not None and owner_watcher.ident is not None:
+                    owner_watcher.join(timeout=2 * WASHER_OWNER_POLL_S)
+            with process_lock:
+                close_washer_cancel_fd()
+                if request_id is not None:
+                    remember_washer_request(request_id, task_id, "finished")
+                current_washer_request = None
+                current_process = None
+                current_task_id = None
+                current_operation = None
+                current_policy_cancel = None
+                current_washer_finish = None
+            run_lock.release()
 
 
 def stop_current_task() -> tuple[int, dict]:
@@ -257,7 +592,15 @@ def stop_current_task() -> tuple[int, dict]:
         process = current_process
         task_id = current_task_id
         single_task = current_operation == "washer-single-task"
+        policy_cancel = current_policy_cancel
+        if policy_cancel is not None:
+            policy_cancel.set()
+            close_washer_cancel_fd()
     if process is None or process.poll() is not None:
+        if policy_cancel is not None:
+            return HTTPStatus.ACCEPTED, {
+                "success": True, "message": "已请求停止模型加载或后态核验",
+            }
         return HTTPStatus.CONFLICT, {"success": False, "message": "当前没有正在运行的测试"}
 
     task_name = TASKS.get(task_id, {}).get("name", task_id or "未知任务")
@@ -330,14 +673,50 @@ def restore_robot_task(task_id: str) -> tuple[int, dict]:
         run_lock.release()
 
 
-def configuration_status():
+def configuration_status(client_ip=None):
     with process_lock:
         task_id, operation = current_task_id, current_operation
         motion_unknown = washer_motion_unknown
+        active_request = None
+        if (client_ip in ("127.0.0.1", "::1", HOMECARE_ROBOT_HOST)
+                and current_washer_request is not None and current_process is not None
+                and current_policy_cancel is not None
+                and not current_policy_cancel.is_set()):
+            active_request = {"taskId": task_id, "requestId": current_washer_request}
     config = web_config.load()
     capabilities = dict(web_config.CAPABILITIES)
     washer_config = single_task_config()
-    if washer_config and not motion_unknown and not config["human_takeover_enabled"]:
+    managed_washer_status = None
+    if washer_config and "managedPolicy" in washer_config:
+        if motion_unknown:
+            status = "WASHER_MOTION_UNKNOWN"
+        elif run_lock.locked() or takeover.active():
+            status = "WASHER_SERVICE_BUSY"
+        else:
+            managed, status = managed_washer_readiness(washer_config)
+            if status == "READY":
+                support = {
+                    "robotHost": HOMECARE_ROBOT_HOST,
+                    "taskIds": list(TASK_IDS),
+                    "timingBasis": washer_config["managedPolicy"]["timingBasis"],
+                    "cancelProtocol": WASHER_CANCEL_PROTOCOL,
+                }
+                if "maxDurationS" in washer_config:
+                    support["maxDurationS"] = managed_max_duration(
+                        washer_config, cleanup_budget_s=managed.CLEANUP_BUDGET_S,
+                    )
+                else:
+                    support["deadlineOwner"] = "client"
+                    support["openDeadlineFinish"] = True
+                capabilities["washer_single_task_v1"] = support
+        motion_unknown = motion_unknown or status == "WASHER_MOTION_UNKNOWN"
+        managed_washer_status = {
+            "status": status, "timingBasis": washer_config["managedPolicy"]["timingBasis"],
+            "taskIds": list(TASK_IDS),
+        }
+        if active_request is not None:
+            managed_washer_status["activeRequest"] = active_request
+    elif washer_config and not motion_unknown and not config["human_takeover_enabled"]:
         capabilities["washer_single_task_v1"] = {
             "robotHost": HOMECARE_ROBOT_HOST,
             "maxDurationS": washer_config["maxDurationS"],
@@ -345,11 +724,12 @@ def configuration_status():
     runtime = takeover.status()
     episode = runtime['episode']
     active = takeover.active()
-    return {"success": True, "config": config, "washerMotionUnknown": motion_unknown, "capabilities": {**capabilities,"human_takeover":runtime["readiness"]["ready"],"action_chunk_recording":runtime["readiness"]["persistent_recording_ready"],"timeline":True},
+    return {"success": True, "config": config, "washerMotionUnknown": motion_unknown, "capabilities": {**capabilities,"human_takeover":runtime["readiness"]["ready"],"action_chunk_recording":runtime["readiness"]["persistent_recording_ready"],"timeline":True,"inline_review_v1":True},
             "locked": run_lock.locked() or active,
             "taskId": episode['taskId'] if active else task_id,
             "operation": 'takeover' if active else operation,
-            "takeover_readiness": runtime['readiness'], "episode": episode,"recording_error":runtime.get("recording_error")}
+            "takeover_readiness": runtime['readiness'], "episode": episode,"recording_error":runtime.get("recording_error"),
+            "managedWasher": managed_washer_status}
 
 
 class IntegratedHandler(BaseHTTPRequestHandler):
@@ -373,7 +753,7 @@ class IntegratedHandler(BaseHTTPRequestHandler):
         if path in {"/", "/intergrated_test.html"}:
             self.send_file(BASE_DIR / "intergrated_test.html", "text/html; charset=utf-8")
             return
-        if path in {"/data_browser.js", "/data_browser.css"}:
+        if path in {"/data_browser.js", "/data_browser.css", "/episode_review.js"}:
             self.send_file(BASE_DIR / path[1:], "text/javascript; charset=utf-8" if path.endswith('.js') else "text/css; charset=utf-8")
             return
         if path == '/api/records' or path.startswith('/api/records/'):
@@ -402,7 +782,7 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/config":
             try:
-                self.send_json(HTTPStatus.OK, configuration_status())
+                self.send_json(HTTPStatus.OK, configuration_status(self.client_address[0]))
             except (OSError, ValueError) as exc:
                 self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": f"无法读取配置: {exc}"})
             return
@@ -434,13 +814,15 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             status, payload = stop_current_task()
             self.send_json(status, payload)
             return
-        if path not in {"/api/run-task", "/api/run-washer-task", "/api/restore-task", "/api/config", "/api/episode/command"}:
+        if path not in {"/api/run-task", "/api/run-washer-task", "/api/cancel-washer-task",
+                        "/api/finish-washer-task", "/api/restore-task", "/api/config",
+                        "/api/episode/command", "/api/episode/review"}:
             self.send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
             return
 
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
-            if not 0 <= content_length <= 65536:
+            if not 0 <= content_length <= (262144 if path=='/api/episode/review' else 65536):
                 raise ValueError("请求过大")
             raw_body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
             body = json.loads(raw_body or "{}")
@@ -450,9 +832,9 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "JSON格式不正确"})
             return
 
-        if path == "/api/episode/command":
+        if path in {"/api/episode/command","/api/episode/review"}:
             try:
-                self.send_json(HTTPStatus.OK, takeover.command(body))
+                self.send_json(HTTPStatus.OK, takeover.save_review(body) if path.endswith('/review') else takeover.command(body))
             except Conflict as exc:
                 self.send_json(HTTPStatus.CONFLICT, {"success": False, "message": str(exc)})
             except (ValueError, TypeError, OSError) as exc:
@@ -473,13 +855,39 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             finally:
                 run_lock.release()
             return
-        if path == "/api/restore-task":
+        if path in {"/api/run-washer-task", "/api/cancel-washer-task", "/api/finish-washer-task"}:
+            task_id, request_id = body.get("taskId"), body.get("requestId")
+            request_fields = {"taskId", "requestId"}
+            if path == "/api/finish-washer-task" and body.get("completionSource") == "client_deadline":
+                request_fields.add("completionSource")
+            if path == "/api/run-washer-task" and set(body) == {"taskId"}:
+                status, payload = run_robot_task(task_id, single_task=True, client_ip=self.client_address[0])
+            elif set(body) != request_fields or not valid_washer_request_id(request_id):
+                status, payload = washer_refusal(
+                    task_id, "WASHER_REQUEST_ID_INVALID", status=HTTPStatus.BAD_REQUEST,
+                )
+            elif path == "/api/cancel-washer-task":
+                status, payload = cancel_washer_task(task_id, request_id, self.client_address[0])
+            elif path == "/api/finish-washer-task":
+                status, payload = finish_washer_task(
+                    task_id, request_id, self.client_address[0], body.get("completionSource"),
+                )
+            else:
+                status, payload = run_robot_task(
+                    task_id, single_task=True, client_ip=self.client_address[0], request_id=request_id,
+                    owner_connection=self.connection,
+                )
+            if valid_washer_request_id(request_id):
+                payload["requestId"] = request_id
+        elif path == "/api/restore-task":
             status, payload = restore_robot_task(body.get("taskId"))
         else:
-            status, payload = run_robot_task(
-                body.get("taskId"), single_task=path == "/api/run-washer-task",
-            )
-        self.send_json(status, payload)
+            status, payload = run_robot_task(body.get("taskId"))
+        try:
+            self.send_json(status, payload)
+        except (BrokenPipeError, ConnectionResetError):
+            if path != "/api/run-washer-task":
+                raise
 
     def send_file(self, path: Path, content_type: str):
         if not path.exists():

@@ -76,12 +76,27 @@ class Runtime:
 
     def active(self):
         with self.lock:
-            return self.episode is not None and self.episode.phase not in TERMINAL
+            return self.episode is not None and (self.episode.phase not in TERMINAL or
+                (self.episode.review_started_s is not None and not self.episode.review_saved))
 
     def status(self):
         with self.lock:
+            snapshot=self.episode.snapshot() if self.episode else None
+            if snapshot is not None:
+                snapshot['review_ready']=self.review_ready()
             return {'success': True, 'readiness': self.readiness_check(),
-                    'episode': self.episode.snapshot() if self.episode else None, 'recording_error':self.recording_error}
+                    'episode': snapshot, 'recording_error':self.recording_error}
+
+    def review_ready(self):
+        ep=self.episode
+        return bool(ep and ep.review_started_s is not None and not ep.inflight and not ep.inference_busy
+                    and not any(t and t.is_alive() for t in [self.worker_thread,self.writer_thread,self.monitor_thread])
+                    and ep.recording and ep.recording.collection_stopped and not self.recording_error)
+
+    def save_review(self,body):
+        from episode_review import save_review
+        with self.lock:
+            return save_review(self,body)
 
     def _read_vr(self, episode):
         try:
@@ -157,7 +172,7 @@ class Runtime:
             worker.initialize()
             while not stop.is_set():
                 phase = episode.snapshot()['phase']
-                if phase in TERMINAL or episode.collection_expired:
+                if phase in TERMINAL or episode.collection_expired or episode.review_started_s is not None:
                     break
                 if phase == 'resetting':
                     try:episode.reset_done(adapter.reset() is not False)
@@ -178,19 +193,21 @@ class Runtime:
                 if episode.recording:
                     episode.recording.flush_events()
                     episode.recording.write('session_end',{'phase':episode.phase,'result':episode.result,'worker_exited':True})
-                    episode.recording.stop_collection()
+                    episode.recording.stop_collection(refresh_barrier=True)
             except Exception as exc:
                 self.recording_error=str(exc)
                 try:
                     if episode.recording: episode.recording.stop_collection()
                 except Exception as stop_error: self.recording_error += '; ' + str(stop_error)
-            if episode.phase in TERMINAL:
+            if episode.phase in TERMINAL or episode.review_started_s is not None:
                 stop.set()
 
     def command(self, body):
         with self.lock:
             if self.episode is None:
                 raise Conflict('当前没有人工接管任务')
+            if self.episode.review_started_s is not None and body.get('command') in {'success','failure','resume','reset'}:
+                raise Conflict('本条已进入失败标注，请在段落窗口点击保存本条数据')
             if body.get('command') in {'resume', 'reset'}:
                 self._read_vr(self.episode)
                 if not self.worker_thread or not self.worker_thread.is_alive():
@@ -203,6 +220,10 @@ class Runtime:
                         if body.get('command') in {'success','failure','reset'}:
                             self.episode.recording.write('result',{'result':self.episode.result,'command':body.get('command'),'request_id':body.get('requestId')})
                         self.episode.recording.flush_events()
+                        if body.get('command')=='review':
+                            self.stop.set()
+                            self.episode.recording.stop_collection(refresh_barrier=True)
+                            self.recording_error=None
                 except Exception as exc:
                     self.recording_error=str(exc)
                     self.episode.result=None
