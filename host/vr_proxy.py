@@ -5,13 +5,12 @@ import math
 import time
 
 from network_config import get_robot_host, load
-MONITOR_HOST = get_robot_host()
 MONITOR_PORT = load()["monitor_port"]
 
 
 def fetch_status():
     started = time.monotonic()
-    conn = http.client.HTTPConnection(MONITOR_HOST, MONITOR_PORT, timeout=.7)
+    conn = http.client.HTTPConnection(get_robot_host(), MONITOR_PORT, timeout=.7)
     try:
         conn.request("GET", "/api/vr/status", headers={"Connection": "close"})
         response = conn.getresponse()

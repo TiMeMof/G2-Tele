@@ -4,6 +4,8 @@ import os
 import posixpath
 import tempfile
 from pathlib import Path
+from network_config import get_robot_host
+from robot_target import normalize_robot_host
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "web_settings.json"
@@ -14,12 +16,14 @@ CAPABILITIES = {"human_takeover": False, "data_collection": False, "timeline": F
 def defaults():
     return {"human_takeover_enabled": True,
             "data_dir": "/data/yfmo",
-            "max_interventions": 3}
+            "max_interventions": 3,
+            "robot_host": get_robot_host()}
 
 
 def normalize(body):
-    if not isinstance(body, dict) or set(body) != set(defaults()):
-        raise ValueError("配置必须包含人工接管开关、数据目录和接管次数")
+    required = {"human_takeover_enabled", "data_dir", "max_interventions"}
+    if not isinstance(body, dict) or set(body) not in (required, required | {"robot_host"}):
+        raise ValueError("配置必须包含人工接管开关、数据目录、接管次数和机器人 IP")
     enabled = body["human_takeover_enabled"]
     if type(enabled) is not bool:
         raise ValueError("人工接管开关必须是布尔值")
@@ -34,7 +38,8 @@ def normalize(body):
     if not directory.startswith("/") or "\\" in directory:
         raise ValueError("数据目录必须是机器人61上的绝对路径")
     return {"human_takeover_enabled": enabled, "data_dir": posixpath.normpath(directory),
-            "max_interventions": limit}
+            "max_interventions": limit,
+            "robot_host": normalize_robot_host(body.get("robot_host", get_robot_host()))}
 
 
 def load():

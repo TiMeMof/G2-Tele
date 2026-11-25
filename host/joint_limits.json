@@ -1,0 +1,212 @@
+{
+  "schema": "model-joint-limits/1",
+  "version": "g2-226-20260923-v1",
+  "units": "rad",
+  "robot_host": "192.168.50.226",
+  "robot_model": "G2_t2v2_crsB",
+  "scope": "model_chunks_only; excludes reset, initialization and grippers",
+  "left_arm": {
+    "source": {
+      "path": "/home/agi/app/bin/motion-control/configuration/robot/G2_t2v2_crsB/model/left_arm.yaml",
+      "sha256": "8a085f6d99ecea0274b7a4d2ab9574620cfe13855657d2ae33b727f472159724",
+      "verified_date": "2026-09-23"
+    },
+    "joints": [
+      {
+        "name": "idx21_arm_l_joint1",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ],
+        "position_ik": [
+          -1.0,
+          2.35
+        ]
+      },
+      {
+        "name": "idx22_arm_l_joint2",
+        "position": [
+          -2.0595,
+          2.0595
+        ],
+        "position_hardware": [
+          -2.0944,
+          2.0944
+        ],
+        "position_ik": [
+          -2.0595,
+          1.0
+        ]
+      },
+      {
+        "name": "idx23_arm_l_joint3",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ],
+        "position_ik": [
+          -2.96,
+          -0.17
+        ]
+      },
+      {
+        "name": "idx24_arm_l_joint4",
+        "position": [
+          -2.4959,
+          1.0123
+        ],
+        "position_hardware": [
+          -2.5307,
+          1.0472
+        ],
+        "position_ik": [
+          -2.35,
+          0.0
+        ]
+      },
+      {
+        "name": "idx25_arm_l_joint5",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ]
+      },
+      {
+        "name": "idx26_arm_l_joint6",
+        "position": [
+          -1.0123,
+          1.0123
+        ],
+        "position_hardware": [
+          -1.0472,
+          1.0472
+        ]
+      },
+      {
+        "name": "idx27_arm_l_joint7",
+        "position": [
+          -1.5359,
+          1.5359
+        ],
+        "position_hardware": [
+          -1.5708,
+          1.5708
+        ]
+      }
+    ]
+  },
+  "right_arm": {
+    "source": {
+      "path": "/home/agi/app/bin/motion-control/configuration/robot/G2_t2v2_crsB/model/right_arm.yaml",
+      "sha256": "09ce6bd858289a6ced3533d303a443f7a94d04e227ab9df62a551c812ce668e9",
+      "verified_date": "2026-09-23"
+    },
+    "joints": [
+      {
+        "name": "idx61_arm_r_joint1",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ],
+        "position_ik": [
+          -2.35,
+          1.0
+        ]
+      },
+      {
+        "name": "idx62_arm_r_joint2",
+        "position": [
+          -2.0595,
+          2.0595
+        ],
+        "position_hardware": [
+          -2.0944,
+          2.0944
+        ],
+        "position_ik": [
+          -2.0595,
+          1.0
+        ]
+      },
+      {
+        "name": "idx63_arm_r_joint3",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ],
+        "position_ik": [
+          0.17,
+          2.96
+        ]
+      },
+      {
+        "name": "idx64_arm_r_joint4",
+        "position": [
+          -2.4959,
+          1.0123
+        ],
+        "position_hardware": [
+          -2.5307,
+          1.0472
+        ],
+        "position_ik": [
+          -2.35,
+          0.0
+        ]
+      },
+      {
+        "name": "idx65_arm_r_joint5",
+        "position": [
+          -3.0718,
+          3.0718
+        ],
+        "position_hardware": [
+          -3.1067,
+          3.1067
+        ]
+      },
+      {
+        "name": "idx66_arm_r_joint6",
+        "position": [
+          -1.0123,
+          1.0123
+        ],
+        "position_hardware": [
+          -1.0472,
+          1.0472
+        ]
+      },
+      {
+        "name": "idx67_arm_r_joint7",
+        "position": [
+          -1.5359,
+          1.5359
+        ],
+        "position_hardware": [
+          -1.5708,
+          1.5708
+        ]
+      }
+    ]
+  }
+}

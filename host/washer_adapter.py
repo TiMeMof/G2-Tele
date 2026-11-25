@@ -6,12 +6,15 @@ hold or cancellation requests; it only prevents subsequent model sends.
 """
 import json
 import logging
+from math import isfinite
 import threading
 from joint_limits import JointLimits
 import time
 from chunk_log import stamp
 from pathlib import Path
 from network_config import get_robot_host
+from washer_model_cleanup import capture_policy_process, close_policy_process
+from washer_tasks import SETTLE_BUDGET_S
 
 
 class WasherAdapter:
@@ -33,6 +36,8 @@ class WasherAdapter:
         self.joint_limits=JointLimits(Path(__file__).resolve().with_name('joint_limits.json'))
         self.last_clip_warning=None
         self.robot=None;self.robot_actions=None;self.model=None
+        self._cancel_model_process=None
+        self._last_motion_end=0.0
         self._action_reader_stop=threading.Event()
         self._action_reader=None
         self._action_reader_error=None
@@ -42,8 +47,11 @@ class WasherAdapter:
             raise RuntimeError('226已有remote_env实例未就绪；不会自动启动或切换模式')
         try:
             self.robot=connect(f'ws://{get_robot_host()}:8891',compression=None,open_timeout=3,close_timeout=2,max_size=20000000)
+            model_process=capture_policy_process(episode.policy)
             self.model=connect(f"ws://{episode.policy['host']}:{episode.policy['port']}",compression=None,open_timeout=3,close_timeout=2,max_size=20000000)
             self.metadata=msgpack_numpy.unpackb(self.model.recv(timeout=3))
+            if model_process is not None and model_process == capture_policy_process(episode.policy):
+                self._cancel_model_process=model_process
             self.robot_actions=connect(f'ws://{get_robot_host()}:8891',compression=None,open_timeout=3,close_timeout=2,max_size=20000000)
             self._action_reader=threading.Thread(target=self._drain_action_replies,daemon=True)
             self._action_reader.start()
@@ -60,9 +68,9 @@ class WasherAdapter:
                 return
             self._ignored_action_replies+=1
 
-    def _rpc(self, method, params):
+    def _rpc(self, method, params, *, timeout=5):
         self.robot.send(self.msgpack.packb({'method':method,'params':params}))
-        reply=self.msgpack.unpackb(self.robot.recv(timeout=5),raw=False)
+        reply=self.msgpack.unpackb(self.robot.recv(timeout=timeout),raw=False)
         if reply.get('error'):raise RuntimeError(str(reply['error']))
         return reply.get('result')
 
@@ -127,7 +135,9 @@ class WasherAdapter:
         try:
             if self._action_reader_error is not None:
                 raise ConnectionError('动作发送连接已断开') from self._action_reader_error
+            self._last_motion_end=time.monotonic()+1.0
             self.robot_actions.send(payload)
+            self._last_motion_end=time.monotonic()+1.0
             self.sent_times['send_return_114']=stamp()
         except Exception:
             self.sent_times['send_error_114']=stamp()
@@ -166,11 +176,55 @@ class WasherAdapter:
                 started=stamp()
                 if self._action_reader_error is not None:
                     raise ConnectionError('动作发送连接已断开') from self._action_reader_error
+                self._last_motion_end=time.monotonic()+2.0
                 self.robot_actions.send(self.msgpack.packb({'method':'execute_action','params':action}))
+                self._last_motion_end=time.monotonic()+2.0
                 sent=stamp()
             if self.recorder:self.recorder.write('initialization',{'status':'transport_sent','send_start_114':started,'send_return_114':sent,'ack_policy':'not_waited'})
             time.sleep(2)
         return True
+
+    def _wait_for_cancel_settle(self):
+        # Let the latest submitted reference interval end before using telemetry.
+        time.sleep(max(0.0,self._last_motion_end-time.monotonic()))
+        earliest=time.time_ns()+250_000_000
+        deadline=time.monotonic()+SETTLE_BUDGET_S
+        previous=quiet_since=None
+        while (remaining:=deadline-time.monotonic())>0:
+            try:
+                observation=self._rpc('get_observation',{'include_images':False,'include_states':True},
+                                      timeout=min(.5,remaining))
+                stamp_ns=observation['timestamps']['states']
+                states=observation['states']
+                velocities=[]
+                for name,count in (('arm_velocity',14),('waist_velocity',5),('head_velocity',3)):
+                    values=states[name]
+                    if (not isinstance(values,list) or len(values)!=count
+                            or any(type(v) not in (int,float) or not isfinite(v) for v in values)):
+                        raise ValueError('invalid joint velocity')
+                    velocities.extend(values)
+                if (type(stamp_ns) is not int or stamp_ns<earliest
+                        or not -250_000_000<=time.time_ns()-stamp_ns<=1_000_000_000):
+                    raise ValueError('stale joint velocity')
+            except (OSError,RuntimeError,KeyError,TypeError,ValueError):
+                previous=quiet_since=None
+            else:
+                now=time.monotonic()
+                consecutive=previous is not None and 0<stamp_ns-previous<=750_000_000
+                if max(map(abs,velocities))>.02:
+                    quiet_since=None
+                elif quiet_since is None or not consecutive:
+                    quiet_since=now
+                elif now-quiet_since>=.35:
+                    return True
+                previous=stamp_ns
+            time.sleep(min(.15,max(0.0,deadline-time.monotonic())))
+        return False
+
+    def close_cancelled_model(self):
+        if self._cancel_model_process is None or not self._wait_for_cancel_settle():
+            return False
+        return close_policy_process(self._cancel_model_process,self.episode.policy)
 
     def close(self):
         self._action_reader_stop.set()

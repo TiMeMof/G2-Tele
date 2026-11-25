@@ -1,12 +1,12 @@
 {
   "host/chunk_log.py": {
-    "bytes": 9176,
-    "sha256": "9b32b4e27fd289992d45884dfe473ba08d85ea0f122e3796a33f670f2cd5c3ba",
+    "bytes": 9258,
+    "sha256": "7fe8213656fe0622145d4ff25c3703d412e94710b679febf713194ea321397ca",
     "previous_sha256": "b7e39b341518c5a41de4795e9d97c8f5351ff6bd799da5171a908ac0f68c3dfd"
   },
   "host/episode_control.py": {
-    "bytes": 22137,
-    "sha256": "64f8678c7f3e327b6e6cdea34c44d5b3cf58bcaa34286ae2acd03cee738d5b5a",
+    "bytes": 22702,
+    "sha256": "08cd87575190780476c4c66cf2196235e40f823e47f38421fc22129af8ade2c7",
     "previous_sha256": "c7dc8b80281d73bb78f9f50a822a25b22154966c448091e1b89e2194154acecc"
   },
   "host/data_browser.css": {
@@ -20,38 +20,38 @@
     "previous_sha256": "1949eaf3e0e605b0af78f1fe1fc9dfb28f9f8c339b96fac92a186641b72aae18"
   },
   "host/intergrated_test.html": {
-    "bytes": 62340,
-    "sha256": "e71a2d446df0b3f23dc7aa9a3ff2579a44977c92a74ae100e6e61b05c9723db9",
+    "bytes": 79065,
+    "sha256": "842e5a241403ecef45c739789190f7f8a3e0774e4554287994ac4e9c08b805f7",
     "previous_sha256": "1b5c37c8aac26d7a8f1222d79cbaa75c08d2b513d168b7a59cfb0cbce2143fe1"
   },
   "host/intergrated_test_server.py": {
-    "bytes": 43364,
-    "sha256": "181b2322c9826774adddbdc585cdf90baf44fbec737d58208f662bbdb68c8b20",
+    "bytes": 63577,
+    "sha256": "3571a171585a30904e362826f8fd724cadcc940052fa606180d709137f47cc87",
     "previous_sha256": "0ecd3d49cda76c6567e4251b8598bff8ab50ff3ef21fa81ab88bdf6367dcca25"
   },
   "host/takeover_runtime.py": {
-    "bytes": 11925,
-    "sha256": "0d59194fc4e81a1b5fc7e9b4a890b0045441c2b23be34de5a3d09446a3031d08",
+    "bytes": 13056,
+    "sha256": "dd1c8a012bcbb915f8e382c67dd4420e30f5803a465459ee2f1fe5f45f015c81",
     "previous_sha256": "8124e78b227ef3bb4486e74c9ff9d5fe340f0e427c47e99419cc48add285d168"
   },
   "host/washer_adapter.py": {
-    "bytes": 9973,
-    "sha256": "1517ee9f31c99da1ae922ee9896334134b09cca0cbc3d5d4e3d448631d1f37d1",
+    "bytes": 12868,
+    "sha256": "819525d8d24f60ca7c8927ac678b20ce33ade12350ace2c370a2d825d6a88418",
     "previous_sha256": "d44b8cc5d44f5163f0c3ab8cecebf29eae8814adbcd96a935180ab358e9da839"
   },
   "host/washer_tasks.py": {
-    "bytes": 7506,
-    "sha256": "892d6e33ab5430cfc0f2b5d77b910fb03b0b58e27a03148f25ad16bf67c71adf",
+    "bytes": 7522,
+    "sha256": "22cd038552caf6d5b68b836a2efada148cd9e14324aa026a061ba4a0b9d209c9",
     "previous_sha256": "6ebab44b470a5b2791de9aae6e0bb79a7eb1a1ca736f6a8946332ad38e9f73d8"
   },
   "host/vr_proxy.py": {
-    "bytes": 3186,
-    "sha256": "3514295cafd776ff2300e61a0768c9e811cda31472496e11c2a51abf9e52c911",
+    "bytes": 3158,
+    "sha256": "061a6f9305de44c502ac34c5bac71ce10d0dc22dd27398a4038366f92447452b",
     "previous_sha256": "f4dead9c78c8379bf62bafa5cd58b9ee59fabf75c21f961c0eac4f0e86c8b826"
   },
   "host/network_config.py": {
-    "bytes": 988,
-    "sha256": "6bdd8544d1c5be693163439518aff5cc8747f60c6dd6cd23c4a7a35413d0d6db",
+    "bytes": 1193,
+    "sha256": "8ea76fa69c234b957fae45b9149be8eed2174af38cfd607da90d55a7484c0d69",
     "previous_sha256": null
   },
   "host/network.json": {
@@ -70,8 +70,8 @@
     "previous_sha256": "12e767c2abddebbb77024551204b2de194d24017eefe8b47001f889a48a55e77"
   },
   "host/web_config.py": {
-    "bytes": 2278,
-    "sha256": "ed544af6989c5d18f20b6bd417e34be5102f908d672b6ba8e3541bff27b3fa06",
+    "bytes": 2616,
+    "sha256": "2f044d8a9bd6614a53bfad1ccf545dc5db36600e1b0774beaf88d3c37692ee59",
     "previous_sha256": "612e31cd39e0adc8d2282bd6bf9f71aee4538c8db802701f4fba22e5d49cdf4e"
   },
   "host/start_server.sh": {

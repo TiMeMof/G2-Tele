@@ -301,12 +301,14 @@ class Episode:
                 raise ValueError('说明最长2000字')
             if reasons is not None and (not isinstance(reasons, list) or any(not isinstance(x,str) for x in reasons)):
                 raise ValueError('失败原因必须是字符串列表')
+            if command == 'cancel' and (type(revision) is not int or not 0 <= revision <= self.revision):
+                raise Conflict('取消任务的版本无效')
             signature = (command, tuple(reasons or []), note)
             if request_id in self.requests:
                 if self.requests[request_id] != signature:
                     raise Conflict('请求标识重复但内容不同')
                 return self.snapshot()
-            if revision != self.revision:
+            if command != 'cancel' and revision != self.revision:
                 raise Conflict('任务状态已变化，请重新确认当前状态')
             reopening_review=command=='review' and self.review_started_s is not None and not self.review_saved
             if self.phase in TERMINAL and not reopening_review:
@@ -338,10 +340,15 @@ class Episode:
                 self.release_armed = False
                 self.release_since = None
                 self._event('model_resumed', reinitialize=False, trigger='web')
-            elif command in {'success', 'failure', 'reset'}:
-                if self.phase not in {'paused', 'awaiting_result'} or self.inflight:
+            elif command in {'success', 'failure', 'reset', 'cancel'}:
+                if command == 'cancel':
+                    if self.review_started_s is not None:
+                        raise Conflict('本条已进入失败标注，请保存本条数据')
+                    selected = ['preventive_stop']
+                elif self.phase not in {'paused', 'awaiting_result'} or self.inflight:
                     raise Conflict('请先中断，并等待正在返回的执行请求结束')
-                selected = list(dict.fromkeys(reasons or []))
+                else:
+                    selected = list(dict.fromkeys(reasons or []))
                 if command == 'reset':
                     if self.execution_error:
                         raise Conflict('通信或执行异常：请先标注结果，结束任务后再独立复位')
@@ -362,6 +369,8 @@ class Episode:
                                'note': note, 'duration_s': self.review_started_s if self.review_started_s is not None else self.clock()-self.started,
                                'interventions': self.rounds,
                                'model_independent_success': command == 'success' and self.rounds == 0}
+                if command == 'cancel':
+                    self.result['cancelled'] = True
                 self.phase = 'resetting' if command == 'reset' else ('succeeded' if command == 'success' else 'failed')
                 self._event('result_decided', result=copy.deepcopy(self.result))
             else:

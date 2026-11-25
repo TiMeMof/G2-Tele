@@ -37,6 +37,8 @@
         .task-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #111827; display: flex; align-items: center; gap: 8px; }
         .task-status { font-size: 14px; color: #6b7280; margin-bottom: 12px; min-height: 20px; }
         .task-buttons { display: flex; gap: 8px; margin-top: 14px; }
+        .clothes-task-buttons { flex-wrap: wrap; }
+        .clothes-task-buttons button { flex-basis: 90px; white-space: nowrap; }
         button { height: 42px; border: 0; border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; padding: 0 16px; transition: all 0.2s; }
         .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; flex: 1; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); }
@@ -147,7 +149,11 @@
                     </div>
                     <p id="modeHint" class="help">普通测试不创建采集记录。</p>
                     <div class="settings-grid">
-                        <label class="field">数据保存根目录（机器人61）
+                        <label class="field">机器人 IP 地址
+                            <input id="robotHost" type="text" spellcheck="false" required placeholder="192.168.50.74" aria-describedby="robotHostHelp">
+                            <span id="robotHostHelp" class="help">读取相机、关节状态和发送动作使用此地址，保存后对后续任务生效。</span>
+                        </label>
+                        <label class="field">数据保存根目录（目标机器人）
                             <input id="dataDirectory" type="text" spellcheck="false" required aria-describedby="directoryHelp">
                             <span id="directoryHelp" class="help">默认 /data/yfmo。统一采集保存在机器人配置的 sessions/分类/任务/日期/任务ID 下，包含原始数据、模型输出与标注。</span>
                         </label>
@@ -192,6 +198,27 @@
 
 
 
+        <section class="section" aria-labelledby="gripperHeading">
+            <h2 id="gripperHeading" class="section-title">夹爪控制</h2>
+            <fieldset id="gripperControls" class="task-grid" disabled aria-labelledby="gripperHeading">
+                <div class="task-card">
+                    <h3 class="task-title">左夹爪</h3>
+                    <div class="task-buttons">
+                        <button type="button" class="btn-primary" onclick="controlGripper('left', 'open')">张开</button>
+                        <button type="button" class="btn-secondary" onclick="controlGripper('left', 'close')">闭合</button>
+                    </div>
+                </div>
+                <div class="task-card">
+                    <h3 class="task-title">右夹爪</h3>
+                    <div class="task-buttons">
+                        <button type="button" class="btn-primary" onclick="controlGripper('right', 'open')">张开</button>
+                        <button type="button" class="btn-secondary" onclick="controlGripper('right', 'close')">闭合</button>
+                    </div>
+                </div>
+            </fieldset>
+            <p id="gripperStatus" class="help" style="margin-top:12px" role="status">正在读取配置…</p>
+        </section>
+
         <section class="section notice">
             <h2>测试说明</h2>
             <ul>
@@ -218,6 +245,10 @@
         <div class="section">
             <div class="section-title">接水任务 (Water Tasks)</div>
             <div class="task-grid" id="waterTasks"></div>
+        </div>
+        <div class="section">
+            <div class="section-title">衣物任务</div>
+            <div class="task-grid" id="clothesTasks"></div>
         </div>
         <div class="section">
             <div class="section-title">洗衣机任务 (Washer Tasks)</div>
@@ -416,21 +447,72 @@
         let serverState = { locked: false, taskId: null, operation: null };
         let serverAvailable = false;
         let episodeBusy = false;
+        let clothesStopping = false;
+        let gripperBusy = false;
+        let gripperResult = '';
+        const sofaGraspLabels = {left: '左手抓取', right: '右手抓取'};
+        const clothesGripperNextAction = {
+            right_arm_take_off_clothes: {left: 'open', right: 'open'},
+            right_arm_hang_clothes: {left: 'open', right: 'open'},
+            '左臂放浅蓝色衣服进洗衣机': {left: 'open', right: 'open'},
+            '双臂关洗衣机门': {left: 'open', right: 'open'},
+            '双臂关洗衣机门（历史帧MEM）': {left: 'open', right: 'open'}
+        };
         let configLoadGeneration = 0;
 
         function isBusy() {
-            return serverState.locked || Object.values(taskStates).some(s => s.running);
+            return gripperBusy || serverState.locked || Object.values(taskStates).some(s => s.running);
         }
         function updateSettingsUi() {
             const blocked = isBusy() || configBusy || !serverAvailable;
             document.getElementById('settingsFields').disabled = blocked;
+            const gripperBlock = !serverAvailable ? '正在等待网页服务配置' :
+                configDirty ? '请先保存配置' :
+                serverState.robotActionsEnabled === false ? '仅模型验证模式，夹爪控制已禁用' :
+                blocked && !gripperBusy ? '任务或设置操作进行中' : '';
+            document.getElementById('gripperControls').disabled = blocked || !!gripperBlock;
+            document.getElementById('gripperStatus').textContent = gripperBusy ? '正在发送夹爪指令…' :
+                gripperBlock || gripperResult || '可独立张开或闭合左、右夹爪。';
             document.getElementById('maxInterventions').disabled = document.getElementById('unlimited').checked;
             document.getElementById('modeHint').textContent = document.getElementById('humanMode').checked
                 ? (serverState.takeover_readiness?.ready ? '当前开放：洗衣机分类全部任务，使用各任务自身的模型配置。接管后停止新动作下发，松开稳定300ms后自动继续；机器人原始数据与VR在同一会话中持续记录。' : '尚未就绪：' + ((serverState.takeover_readiness?.blockers || ['正在读取准备状态']).join('；')))
                 : '普通测试不创建采集记录。';
+            if (serverState.robotActionsEnabled === false) {
+                const liveTasks = Object.entries(serverState.clothesReadiness || {})
+                    .filter(([, readiness]) => readiness.can_execute)
+                    .map(([taskId]) => allTasks[taskId]?.name).filter(Boolean);
+                document.getElementById('modeHint').textContent = liveTasks.length
+                    ? `实机执行已开放 · ${liveTasks.join('、')}`
+                    : '当前可验证衣物模型，实机动作已禁用。';
+            }
             if (isBusy()) document.getElementById('configStatus').textContent = '任务运行或复位中，配置已锁定';
         }
+
+        async function controlGripper(side, action) {
+            if (document.getElementById('gripperControls').disabled) return;
+            gripperBusy = true;
+            gripperResult = '';
+            renderTasks();
+            try {
+                const response = await fetch('/api/gripper', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({side, action})
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || '夹爪指令未确认');
+                gripperResult = result.message;
+                showNotification(result.message, 'success');
+            } catch (error) {
+                gripperResult = error.message;
+                showNotification(error.message, 'error');
+            } finally {
+                gripperBusy = false;
+                await loadConfig();
+            }
+        }
+
         function fillSettings(config) {
+            document.getElementById('robotHost').value = config.robot_host || '';
             document.getElementById('humanMode').checked = config.human_takeover_enabled;
             document.getElementById('dataDirectory').value = config.data_dir;
             document.getElementById('unlimited').checked = config.max_interventions === null;
@@ -446,6 +528,7 @@
                 if (!result.success) throw new Error(result.message);
                 serverAvailable = true;
                 serverState = result;
+                if (result.operation !== 'clothes-robot') clothesStopping = false;
                 renderEpisode(result.episode);
                 if (!configDirty && !configBusy) {
                     const changed = JSON.stringify(savedConfig) !== JSON.stringify(result.config);
@@ -598,6 +681,7 @@
                 const response = await fetch('/api/config', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({human_takeover_enabled: document.getElementById('humanMode').checked,
+                        robot_host: document.getElementById('robotHost').value.trim(),
                         data_dir: document.getElementById('dataDirectory').value,
                         max_interventions: unlimited ? null : limit})
                 });
@@ -653,11 +737,13 @@
             const placeContainer = document.getElementById('placeTasks');
             const waterContainer = document.getElementById('waterTasks');
             const washerContainer = document.getElementById('washerTasks');
+            const clothesContainer = document.getElementById('clothesTasks');
             const drawerContainer = document.getElementById('drawerTasks');
             pickContainer.innerHTML = '';
             placeContainer.innerHTML = '';
             waterContainer.innerHTML = '';
             washerContainer.innerHTML = '';
+            clothesContainer.innerHTML = '';
             drawerContainer.innerHTML = '';
 
             Object.entries(allTasks).forEach(([taskId, task]) => {
@@ -669,6 +755,8 @@
                     pickContainer.appendChild(card);
                 } else if (task.type === 'place') {
                     placeContainer.appendChild(card);
+                } else if (task.type === 'clothes') {
+                    clothesContainer.appendChild(card);
                 } else if (task.type === 'washer') {
                     washerContainer.appendChild(card);
                 } else if (task.type === 'water') {
@@ -684,11 +772,14 @@
             const card = document.createElement('div');
             card.className = 'task-card';
             card.id = `task-${taskId}`;
+            if (task.managedClothes || task.type === 'clothes') return renderClothesCard(card, taskId, task);
 
             const state = {...(taskStates[taskId] || {})};
             if (serverState.locked && serverState.taskId === taskId) {
                 state.running = true;
-                state.status = serverState.operation === 'restore' ? '正在复位...' : '正在运行...';
+                state.status = serverState.operation === 'restore' ? '正在复位...' :
+                    serverState.operation === 'clothes-restore' ? '正在复位双臂和双夹爪…' :
+                    serverState.operation === 'model-validation' ? '正在加载或验证模型…' : '正在运行...';
             }
             const ep=serverState.episode?.taskId===taskId && !legacyInterventions[taskId] && !(taskStates[taskId]?.running && serverState.operation!=='takeover') ? serverState.episode : null;
             const needsDecision=ep && (['paused','awaiting_result'].includes(ep.phase) || ep.review_pending);
@@ -707,14 +798,15 @@
 
             card.innerHTML = `
                 <div class="task-title">${icon}${task.name}</div>
-                <div class="task-status" id="status-${taskId}">${state.status || '待测试'}</div>
+                <div class="task-status" id="status-${taskId}">${state.status || (task.inferenceOnly ? '待验证 · 使用合成图像和状态' : '待测试')}</div>
+                ${task.robotFlowConnected ? '<div class="help">实机从人工就位后的当前姿态开始。</div>' : ''}
                 <div class="task-buttons">
-                    <button class="btn-primary" onclick="runTask('${taskId}')">
-                        ${state.running ? '运行中...' : '运行测试'}
+                    <button class="btn-primary" onclick="runTask('${taskId}')" ${isBusy() || configBusy || !serverAvailable || (serverState.robotActionsEnabled === false && !task.inferenceOnly) ? 'disabled' : ''}>
+                        ${state.running ? '运行中...' : task.inferenceOnly ? '验证模型' : '运行测试'}
                     </button>
                     ${needsDecision ? `<button class="btn-primary" onclick="showInterventionDialog('${taskId}','episode')">处理任务</button>` : state.running && serverState.operation !== 'restore' ?
                       `<button class="btn-interrupt" onclick="interruptTask('${taskId}')" ${episodeBusy ? 'disabled' : ''}>中止</button>` :
-                      `<button class="btn-secondary" onclick="restoreTask('${taskId}')" ${isBusy() || configBusy || !serverAvailable ? 'disabled' : ''}>复位</button>`}
+                      task.inferenceOnly ? '' : `<button class="btn-secondary" onclick="restoreTask('${taskId}')" ${isBusy() || configBusy || !serverAvailable || serverState.robotActionsEnabled === false ? 'disabled' : ''}>复位</button>`}
                 </div>
                 ${hasOptions && !needsDecision ? `<button class="task-options" onclick="showInterventionDialog('${taskId}')">${ep?.result || legacyInterventions[taskId]?.result ? '查看任务结果' : '处理任务'}</button>` : ''}
             `;
@@ -722,8 +814,134 @@
             return card;
         }
 
+        function renderClothesCard(card, taskId, task) {
+            const state = taskStates[taskId] || {};
+            const serverOperation = serverState.taskId === taskId ? serverState.operation : null;
+            const operation = serverOperation || (state.running ? state.operation : null);
+            const testing = operation === 'clothes-robot';
+            const loaded = serverState.clothesModels?.[taskId] === 'ready';
+            const readiness = serverState.clothesReadiness?.[taskId];
+            const blocked = isBusy() || !serverAvailable || configDirty || configBusy;
+            const activeHand = serverState.sofaGraspHand ?? state.graspHand ?? 'right';
+            const choices = task.managedSofa ? Object.entries(sofaGraspLabels) : [[null, '运行测试']];
+            const graspButtons = choices.map(([hand, label]) => {
+                const active = testing && (!task.managedSofa || activeHand === hand);
+                const disabled = active
+                    ? !serverAvailable || serverOperation !== 'clothes-robot' || clothesStopping
+                    : testing || blocked || !loaded || !readiness?.can_execute;
+                const start = hand ? `runClothesRobot('${taskId}', false, '${hand}')` : `runClothesRobot('${taskId}')`;
+                const handler = active ? `stopClothesTest('${taskId}')` : start;
+                return `<button class="${active ? 'btn-interrupt' : 'btn-primary'}" onclick="${handler}" ${disabled ? 'disabled' : ''}>${active ? '中止' : label}</button>`;
+            }).join('');
+            const gripperButtons = clothesGripperNextAction[taskId]
+                ? ['left', 'right'].map(side => {
+                    const action = clothesGripperNextAction[taskId][side];
+                    const actionLabel = action === 'open' ? '开' : '关';
+                    const handLabel = side === 'left' ? '左' : '右';
+                    return `<button class="btn-secondary" onclick="toggleClothesGripper('${taskId}','${side}')" ${blocked || !readiness?.can_execute ? 'disabled' : ''}>${actionLabel}${handLabel}夹爪</button>`;
+                }).join('')
+                : '';
+            const activeStatus = {
+                'clothes-model-start': '正在准备机器人和模型…',
+                'clothes-model-stop': '正在关闭模型…',
+                'clothes-robot': clothesStopping ? '正在中止…' : '正在运行测试…',
+                'clothes-restore': '正在复位…',
+                'clothes-gripper-left-open': '正在打开左夹爪…',
+                'clothes-gripper-left-close': '正在关闭左夹爪…',
+                'clothes-gripper-right-open': '正在打开右夹爪…',
+                'clothes-gripper-right-close': '正在关闭右夹爪…',
+                'model-validation': '正在验证模型…'
+            };
+            card.classList.toggle('running', !!operation);
+            card.classList.toggle('failed', !operation && state.success === false);
+            card.innerHTML = `
+                <div class="task-title">${task.name}</div>
+                <div class="task-status"></div>
+                <div class="task-buttons clothes-task-buttons">
+                    <button class="btn-secondary" onclick="toggleClothesModel('${taskId}')" ${blocked ? 'disabled' : ''}>${loaded || operation === 'clothes-model-stop' ? '关闭模型' : '一键启动'}</button>
+                    ${graspButtons}
+                    ${gripperButtons}
+                    <button class="btn-secondary" onclick="runClothesRobot('${taskId}', true)" ${blocked || !readiness?.can_reset_pose ? 'disabled' : ''} ${readiness && !readiness.pose_recorded_at ? 'title="尚未记录本任务的复位姿态"' : ''}>复位</button>
+                </div>`;
+            card.querySelector('.task-status').textContent = activeStatus[operation] || state.status || (loaded ? '模型已就绪' : '模型未启动');
+            return card;
+        }
+
+        async function toggleClothesModel(taskId) {
+            if (isBusy() || !serverAvailable) return;
+            const loaded = serverState.clothesModels?.[taskId] === 'ready';
+            taskStates[taskId] = {running: true, operation: loaded ? 'clothes-model-stop' : 'clothes-model-start'};
+            renderTasks();
+            try {
+                const response = await fetch(loaded ? '/api/clothes/model/stop' : '/api/clothes/model/start', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({taskId})
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+                delete taskStates[taskId];
+            } catch (error) {
+                taskStates[taskId] = {success: false, status: loaded ? '模型关闭失败' : '一键启动失败'};
+                showOutput(taskStates[taskId].status, error.message);
+            } finally { await loadConfig(); }
+        }
+
+        async function stopClothesTest(taskId) {
+            if (clothesStopping || !serverAvailable || serverState.taskId !== taskId || serverState.operation !== 'clothes-robot') return;
+            clothesStopping = true;
+            renderTasks();
+            try {
+                const response = await fetch('/api/clothes/stop-test', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({taskId})
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+            } catch (error) {
+                clothesStopping = false;
+                showNotification(error.message, 'error');
+            } finally { await loadConfig(); }
+        }
+
+        async function toggleClothesGripper(taskId, side) {
+            const nextAction = clothesGripperNextAction[taskId];
+            const action = nextAction?.[side];
+            const readiness = serverState.clothesReadiness?.[taskId];
+            if (!nextAction || !['left', 'right'].includes(side) || !['open', 'close'].includes(action)) return;
+            if (isBusy() || !serverAvailable || !readiness?.can_execute) {
+                showNotification(readiness?.blockers?.join('；') || '夹爪控制暂不可用', 'error');
+                return;
+            }
+            const actionLabel = action === 'open' ? '打开' : '关闭';
+            const handLabel = side === 'left' ? '左' : '右';
+            taskStates[taskId] = {running: true, operation: `clothes-gripper-${side}-${action}`, status: `${actionLabel}${handLabel}夹爪中…`};
+            renderTasks();
+            try {
+                const response = await fetch('/api/clothes/gripper', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({taskId, side, action})
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || '夹爪指令失败');
+                nextAction[side] = action === 'open' ? 'close' : 'open';
+                taskStates[taskId] = {running: false, status: result.message};
+                showNotification(result.message, 'success');
+            } catch (error) {
+                taskStates[taskId] = {running: false, status: `${actionLabel}${handLabel}夹爪失败`};
+                showNotification(error.message, 'error');
+            } finally { await loadConfig(); renderTasks(); }
+        }
+
         async function interruptTask(taskId) {
             if (episodeBusy || (serverState.taskId && serverState.taskId!==taskId)) return;
+            if (allTasks[taskId]?.inferenceOnly) {
+                try {
+                    const response = await fetch('/api/stop-task', {method: 'POST'});
+                    const result = await response.json();
+                    if (!response.ok || !result.success) throw new Error(result.message);
+                    const operation = taskStates[taskId]?.operation || serverState.operation;
+                    showNotification(['clothes-robot', 'clothes-restore'].includes(operation) ? '已请求停止后续动作下发；已提交轨迹仍需核对。' : '已请求结束模型验证', 'success');
+                } catch (error) { showNotification(error.message, 'error'); }
+                return;
+            }
             const isEpisode=serverState.operation==='takeover' && serverState.episode?.taskId===taskId;
             if (!isEpisode) legacyInterventions[taskId]={id:'stop-'+Date.now(),pending:true,stopped:false,result:null};
             episodeBusy=true;
@@ -744,6 +962,31 @@
                 if (!isEpisode) legacyInterventions[taskId].pending=false;
                 episodeBusy=false;await loadConfig();renderInterventionDialog();
             }
+        }
+
+        async function runClothesRobot(taskId, restorePose = false, graspHand = null) {
+            const readiness = serverState.clothesReadiness?.[taskId];
+            const sofa = allTasks[taskId].managedSofa;
+            const action = restorePose ? '复位' : (sofaGraspLabels[graspHand] || '运行测试');
+            if (isBusy() || configDirty || !serverAvailable || !(restorePose ? readiness?.can_reset_pose : readiness?.can_execute)) {
+                showNotification(readiness?.blockers?.join('；') || action + '暂不可用', 'error'); return;
+            }
+            if (!restorePose && serverState.clothesModels?.[taskId] !== 'ready') return;
+            if (restorePose && !confirm('机器人将把双臂和双夹爪恢复到已记录的姿态。请确认活动范围已清空后继续。')) return;
+            const payload = {taskId};
+            if (sofa && !restorePose && graspHand) payload.graspHand = graspHand;
+            taskStates[taskId] = {running: true, status: action + '中…', operation: restorePose ? 'clothes-restore' : 'clothes-robot', graspHand};
+            renderTasks();
+            try {
+                const response = await fetch(restorePose ? '/api/clothes/restore-pose' : '/api/run-clothes-robot', {method: 'POST',
+                    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+                const result = await response.json();
+                taskStates[taskId] = {running: false, status: result.message, success: result.success ? null : false};
+                if (!result.success) showOutput(`${allTasks[taskId].name}${action}`, result.output || result.message);
+            } catch (error) {
+                taskStates[taskId] = {running: false, status: '连接中断，须核对轨迹状态', success: null};
+                showNotification(error.message, 'error');
+            } finally { await loadConfig(); renderTasks(); }
         }
 
         async function restoreTask(taskId, askConfirmation=true) {
@@ -793,7 +1036,7 @@
 
             const runId=Date.now()+'-'+Math.random();runRequests[taskId]=runId;
             delete legacyInterventions[taskId];
-            taskStates[taskId] = { running: true, status: '正在运行...' };
+            taskStates[taskId] = { running: true, status: allTasks[taskId].inferenceOnly ? '正在加载或验证模型…' : '正在运行...' };
             renderTasks();
 
             try {
@@ -822,7 +1065,8 @@
                 };
 
                 if (result.success) {
-                    showNotification(`✓ ${allTasks[taskId].name} 测试成功`, 'success');
+                    showNotification(`✓ ${allTasks[taskId].name} ${allTasks[taskId].inferenceOnly ? '模型验证通过' : '测试成功'}`, 'success');
+                    if (allTasks[taskId].inferenceOnly) showOutput(`${allTasks[taskId].name}模型验证`, result.output || result.message);
                 } else {
                     showNotification(`✗ ${allTasks[taskId].name} 测试失败`, 'error');
                     showOutput(allTasks[taskId].name, result.output || result.message);
@@ -844,7 +1088,10 @@
             // 查找当前正在运行的任务，显示在顶部
             const runningId = serverState.taskId || Object.keys(taskStates).find(id => taskStates[id].running);
             const el = document.getElementById('currentTask');
-            if (runningId && allTasks[runningId]) {
+            if (gripperBusy || serverState.operation?.startsWith('gripper-')) {
+                el.textContent = '夹爪控制';
+                el.classList.add('running');
+            } else if (runningId && allTasks[runningId]) {
                 el.textContent = allTasks[runningId].name;
                 el.classList.add('running');
             } else {

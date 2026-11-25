@@ -10,8 +10,11 @@ import socket
 import subprocess
 import sys
 import threading
-from time import monotonic
+from contextlib import closing
+from time import monotonic, sleep
 import web_config
+import chunk_log
+from network_config import get_robot_host, configure_proxy_bypass
 import vr_proxy
 from takeover_runtime import Runtime, WasherAdapter, make_recorder
 from episode_control import Conflict
@@ -26,6 +29,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from remote_records import RemoteRecordBrowser
+from clothes_task import (CLOTHES_TASKS, CLOSE_WASHER_TASK_ID, MEM_CLOSE_WASHER_TASK_ID, HANG_TASK_ID, PUT_WASHER_TASK_ID, SOFA_GRASP_HANDS, SOFA_TASK_ID, TASK_ID as CLOTHES_TASK_ID,
+                          load_task_spec,
+                          ClothesPolicy, clothes_policy_slot, validation_report_path)
+from clothes_robot import (clothes_motion_allowed, ensure_remote_env_running,
+                           execution_readiness as clothes_readiness, robot_report_path,
+                           RobotConnection, load_robot_setup)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -64,13 +73,19 @@ TASKS = {
     "right_arm_place_glasses": {"name": "右臂放眼镜", "type": "place"},
     "right_arm_pull_drawer": {"name": "右臂拉抽屉", "type": "drawer"},
     "right_arm_push_drawer": {"name": "右臂关抽屉", "type": "drawer"},
+    **{task_id: {"name": name, "type": "washer" if task_id in {PUT_WASHER_TASK_ID, CLOSE_WASHER_TASK_ID, MEM_CLOSE_WASHER_TASK_ID} else "clothes",
+                 "inferenceOnly": True, "robotFlowConnected": True, "managedClothes": True,
+                 "managedSofa": task_id == SOFA_TASK_ID}
+       for task_id, name in CLOTHES_TASKS.items()},
 }
 
 run_lock = threading.Lock()
 process_lock = threading.Lock()
+clothes_policies = {task_id: ClothesPolicy(task_id) for task_id in CLOTHES_TASKS}
 current_process = None
 current_task_id = None
 current_operation = None
+current_sofa_grasp_hand = None
 current_policy_cancel = None
 current_washer_request = None
 current_washer_cancel_fd = None
@@ -195,7 +210,7 @@ def communicate_client_owned(process, cancelled):
 
 
 def cancel_washer_task(task_id, request_id, client_ip):
-    if client_ip != HOMECARE_ROBOT_HOST:
+    if client_ip != get_robot_host():
         return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
     if task_id not in TASK_IDS or not valid_washer_request_id(request_id):
         return washer_refusal(task_id, "WASHER_CANCEL_REQUEST_INVALID", status=HTTPStatus.BAD_REQUEST)
@@ -225,7 +240,7 @@ def cancel_washer_task(task_id, request_id, client_ip):
 
 
 def finish_washer_task(task_id, request_id, client_ip, completion_source=None):
-    if client_ip != HOMECARE_ROBOT_HOST:
+    if client_ip != get_robot_host():
         return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
     if task_id not in TASK_IDS or not valid_washer_request_id(request_id):
         return washer_refusal(task_id, "WASHER_FINISH_REQUEST_INVALID", status=HTTPStatus.BAD_REQUEST)
@@ -251,6 +266,228 @@ def finish_washer_task(task_id, request_id, client_ip, completion_source=None):
     }
 
 
+def model_validation_only():
+    return os.environ.get("VLA_MODEL_VALIDATION_ONLY") == "1"
+
+
+def robot_actions_disabled():
+    return HTTPStatus.FORBIDDEN, {"success": False, "message": "当前为模型验证模式，机器人动作已禁用"}
+
+
+def run_clothes_validation(task_id):
+    return _run_clothes_process(task_id, real_robot=False)
+
+
+def run_clothes_robot_task(task_id=CLOTHES_TASK_ID, *, grasp_hand=None):
+    return _run_clothes_process(task_id, real_robot=True, grasp_hand=grasp_hand)
+
+
+def set_clothes_model(task_id, start):
+    global current_task_id, current_operation
+    if not run_lock.acquire(blocking=False):
+        return HTTPStatus.CONFLICT, {"success": False, "message": "请等当前任务结束"}
+    try:
+        if takeover.active():
+            return HTTPStatus.CONFLICT, {"success": False, "message": "请等当前任务结束"}
+        with process_lock:
+            current_task_id = task_id
+            current_operation = "clothes-model-start" if start else "clothes-model-stop"
+        with clothes_policy_slot():
+            if start:
+                if clothes_motion_allowed(task_id):
+                    readiness = clothes_readiness(task_id=task_id)
+                    if not readiness["can_execute"]:
+                        return HTTPStatus.CONFLICT, {"success": False, "message": "；".join(readiness["blockers"])}
+                    ensure_remote_env_running(readiness["robot"])
+                clothes_policies[task_id].start()
+            else:
+                clothes_policies[task_id].close()
+        return HTTPStatus.OK, {"success": True, "message": "模型已就绪" if start else "模型已关闭"}
+    except Exception as exc:
+        return HTTPStatus.INTERNAL_SERVER_ERROR, {"success": False, "message": str(exc)}
+    finally:
+        with process_lock:
+            current_task_id = current_operation = None
+        run_lock.release()
+
+
+def send_gripper_command(robot, side, action):
+    command = {
+        "base_link": "base_link",
+        "trajectory_reference_time": 0.8,
+        f"{side}_effector": [[-0.785 if action == "open" else 0.0]],
+    }
+    with closing(RobotConnection(robot)) as connection:
+        connection.execute(command)
+        sleep(command["trajectory_reference_time"])
+
+
+def control_gripper(body):
+    global current_operation
+    side, action = body.get("side"), body.get("action")
+    if set(body) != {"side", "action"} or side not in ("left", "right") or action not in ("open", "close"):
+        return HTTPStatus.BAD_REQUEST, {"success": False, "message": "请选择左夹爪或右夹爪，以及张开或闭合"}
+    if model_validation_only():
+        return robot_actions_disabled()
+    if not run_lock.acquire(blocking=False):
+        return HTTPStatus.CONFLICT, {"success": False, "message": "任务正在运行，请结束任务后再控制夹爪"}
+    try:
+        if takeover.active():
+            return HTTPStatus.CONFLICT, {"success": False, "message": "请先结束当前任务"}
+        robot = {"host": get_robot_host(), "management_port": 8890, "control_port": 8891}
+        with process_lock:
+            current_operation = f"gripper-{side}-{action}"
+        send_gripper_command(robot, side, action)
+        label = "左夹爪" if side == "left" else "右夹爪"
+        verb = "张开" if action == "open" else "闭合"
+        return HTTPStatus.OK, {"success": True, "message": f"机器人已接收{label}{verb}指令",
+                               "robotActionsSubmitted": 1}
+    except Exception as exc:
+        return HTTPStatus.BAD_GATEWAY, {"success": False, "message": f"夹爪指令未确认：{exc}"}
+    finally:
+        with process_lock:
+            current_operation = None
+        run_lock.release()
+
+
+def control_clothes_gripper(task_id, side, action):
+    global current_task_id, current_operation
+    if task_id not in {CLOTHES_TASK_ID, HANG_TASK_ID, PUT_WASHER_TASK_ID, CLOSE_WASHER_TASK_ID, MEM_CLOSE_WASHER_TASK_ID} or side not in {"left", "right"} or action not in {"open", "close"}:
+        return HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务夹爪操作无效"}
+    if not clothes_motion_allowed(task_id):
+        return robot_actions_disabled()
+    if not run_lock.acquire(blocking=False):
+        return HTTPStatus.CONFLICT, {"success": False, "message": "已有任务运行，请等待完成"}
+
+    try:
+        if takeover.active():
+            return HTTPStatus.CONFLICT, {"success": False, "message": "请先结束当前任务"}
+        readiness = clothes_readiness(task_id=task_id)
+        if not readiness["can_execute"]:
+            return HTTPStatus.CONFLICT, {"success": False, "message": "；".join(readiness["blockers"])}
+        setup = load_robot_setup(readiness["setup_path"])
+        with process_lock:
+            current_task_id = task_id
+            current_operation = f"clothes-gripper-{side}-{action}"
+        ensure_remote_env_running(setup["robot"])
+        send_gripper_command(setup["robot"], side, action)
+        hand_label = "左" if side == "left" else "右"
+        action_label = "张开" if action == "open" else "闭合"
+        return HTTPStatus.OK, {
+            "success": True, "taskId": task_id,
+            "message": f"已发送{hand_label}夹爪{action_label}指令",
+            "robotActionsSubmitted": 1,
+        }
+    except Exception as exc:
+        return HTTPStatus.INTERNAL_SERVER_ERROR, {"success": False, "message": str(exc)}
+    finally:
+        with process_lock:
+            current_task_id = current_operation = None
+        run_lock.release()
+
+
+def _kill_clothes_process(process):
+    if os.name == "nt":
+        process.kill()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def _run_clothes_process(task_id, *, real_robot, restore_pose=False, grasp_hand=None):
+    global current_process, current_task_id, current_operation, current_sofa_grasp_hand
+    name = CLOTHES_TASKS[task_id]
+    if not run_lock.acquire(blocking=False):
+        return HTTPStatus.CONFLICT, {"success": False, "message": "已有任务运行，请等待完成"}
+    process = None
+    try:
+        if takeover.active():
+            return HTTPStatus.CONFLICT, {"success": False, "message": "请先结束当前任务"}
+        if real_robot:
+            readiness = clothes_readiness(task_id=task_id)
+            if not readiness["can_execute"]:
+                return HTTPStatus.CONFLICT, {"success": False, "message": "；".join(readiness["blockers"]),
+                                             "preflight": readiness, "robotActionsSubmitted": 0}
+            if restore_pose and not readiness["can_reset_pose"]:
+                return HTTPStatus.CONFLICT, {"success": False, "message": "尚未记录本任务的复位姿态",
+                                             "robotActionsSubmitted": 0}
+        use_loaded_model = real_robot and not restore_pose
+        if use_loaded_model and not clothes_policies[task_id].ready:
+            return HTTPStatus.CONFLICT, {"success": False, "message": f"请先启动{name}模型", "robotActionsSubmitted": 0}
+        run_until_stopped = use_loaded_model and load_task_spec(task_id=task_id).get("run_until_stopped") is True
+        script = "run_clothes_robot.py" if real_robot else "run_clothes.py"
+        command = [sys.executable, "-u", str(BASE_DIR / script), "--task", task_id]
+        if real_robot:
+            command.append("--restore-pose" if restore_pose else "--execute")
+        if use_loaded_model:
+            command.append("--use-loaded-model")
+        if use_loaded_model and task_id == SOFA_TASK_ID:
+            grasp_hand = grasp_hand or "right"
+            command.extend(("--grasp-hand", grasp_hand))
+        operation = "clothes-restore" if restore_pose else ("clothes-robot" if real_robot else "model-validation")
+        with process_lock:
+            process = subprocess.Popen(
+                command, cwd=BASE_DIR,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                start_new_session=(os.name != "nt"),
+            )
+            current_process, current_task_id, current_operation = process, task_id, operation
+            current_sofa_grasp_hand = grasp_hand if use_loaded_model and task_id == SOFA_TASK_ID else None
+        try:
+            timeout = None if run_until_stopped else (360 if real_robot else 210)
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_clothes_process(process)
+            stdout, stderr = process.communicate()
+            stderr += "\n任务超时，任务进程已结束"
+        ok = process.returncode == 0
+        report_path = robot_report_path(task_id, restore_pose=restore_pose) if real_robot else validation_report_path(task_id)
+        report = json.loads(report_path.read_text(encoding="utf-8")) if ok else None
+        if report and report["task_id"] != task_id:
+            raise ValueError("任务结果与所选衣物任务不匹配")
+        if restore_pose:
+            message = f"{name}姿态复位未完成，请核对轨迹状态"
+            if ok:
+                message = {"pose_already_set": "双臂和双夹爪已处于记录姿态",
+                           "pose_restored": "双臂和双夹爪已确认复位"}.get(report["status"], "已中止姿态复位")
+        elif real_robot:
+            message = f"{name}实机流程未完成，请核对轨迹状态"
+            if ok:
+                message = "运行结束，等待现场确认抓取结果" if task_id == SOFA_TASK_ID else f"{name}执行流程已结束，等待人工核对实机结果"
+                if report["status"] in {"cancelled_before_connect", "stopped_submitting"}:
+                    message = "已中止" if task_id == SOFA_TASK_ID else f"{name}已中止后续动作下发"
+        else:
+            message = f"{name}模型推理验证通过（合成输入）" if ok else f"{name}模型推理验证未通过"
+        return HTTPStatus.OK if ok else HTTPStatus.INTERNAL_SERVER_ERROR, {
+            "success": ok, "taskId": task_id, "taskName": name,
+            "inferenceOnly": not real_robot, "robotActionsSubmitted": (report or {}).get("robot_actions_submitted", 0) if not real_robot or ok else None,
+            "physicalEffectVerified": False,
+            "message": message,
+            "output": tail_output((stdout or "") + "\n" + (stderr or "")),
+            "validation": {k: report[k] for k in (
+                "input_kind", "action_shape", "all_finite", "prompt", "policy_timing",
+                "robot_connected", "robot_actions_submitted", "checkpoint", "asset_id", "model_metadata",
+            )} if report and not real_robot else None,
+            "execution": report if real_robot else None,
+        }
+    except Exception as exc:
+        return HTTPStatus.INTERNAL_SERVER_ERROR, {
+            "success": False, "taskId": task_id, "inferenceOnly": not real_robot,
+            "robotActionsSubmitted": None if real_robot and process is not None else 0,
+            "message": f"{name}流程未完成：{exc}",
+        }
+    finally:
+        if process is not None and process.poll() is None:
+            _kill_clothes_process(process)
+            process.communicate()
+        with process_lock:
+            current_process = current_task_id = current_operation = None
+            current_sofa_grasp_hand = None
+        run_lock.release()
+
+
 def run_robot_task(
     task_id: str, *, single_task=False, client_ip=None, request_id=None, owner_connection=None,
 ) -> tuple[int, dict]:
@@ -260,9 +497,15 @@ def run_robot_task(
 
     if not isinstance(task_id, str) or task_id not in TASKS:
         return HTTPStatus.BAD_REQUEST, {"success": False, "message": f"未知任务: {task_id}"}
+    if task_id in CLOTHES_TASKS:
+        if single_task or request_id is not None:
+            return HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务使用独立的模型验证和实机入口"}
+        return run_clothes_validation(task_id)
+    if model_validation_only():
+        return robot_actions_disabled()
     if request_id is not None and (not single_task or not valid_washer_request_id(request_id)):
         return washer_refusal(task_id, "WASHER_REQUEST_ID_INVALID", status=HTTPStatus.BAD_REQUEST)
-    if request_id is not None and client_ip != HOMECARE_ROBOT_HOST:
+    if request_id is not None and client_ip != get_robot_host():
         return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED", status=HTTPStatus.FORBIDDEN)
     if request_id is not None:
         with process_lock:
@@ -299,7 +542,7 @@ def run_robot_task(
             run_lock.release()
             return washer_refusal(task_id, "限时洗衣机模式不可用，请检查配置或确认上一次轨迹已停止")
         if managed_configured:
-            if client_ip != HOMECARE_ROBOT_HOST:
+            if client_ip != get_robot_host():
                 run_lock.release()
                 return washer_refusal(task_id, "HOMECARE_WASHER_CLIENT_NOT_AUTHORIZED",
                                       status=HTTPStatus.FORBIDDEN)
@@ -580,8 +823,8 @@ def run_robot_task(
             run_lock.release()
 
 
-def stop_current_task() -> tuple[int, dict]:
-    if takeover.active():
+def stop_current_task(clothes_task=None) -> tuple[int, dict]:
+    if clothes_task is None and takeover.active():
         snapshot = takeover.status()['episode']
         try:
             return HTTPStatus.OK, takeover.command({'command': 'pause', 'episodeId': snapshot['id'],
@@ -591,7 +834,10 @@ def stop_current_task() -> tuple[int, dict]:
     with process_lock:
         process = current_process
         task_id = current_task_id
+        if clothes_task is not None and (task_id != clothes_task or current_operation != "clothes-robot"):
+            return HTTPStatus.CONFLICT, {"success": False, "message": "当前没有正在运行的对应测试"}
         single_task = current_operation == "washer-single-task"
+        clothes_motion = current_operation in {"clothes-robot", "clothes-restore"}
         policy_cancel = current_policy_cancel
         if policy_cancel is not None:
             policy_cancel.set()
@@ -605,11 +851,11 @@ def stop_current_task() -> tuple[int, dict]:
 
     task_name = TASKS.get(task_id, {}).get("name", task_id or "未知任务")
     try:
-        if os.name == "nt":
+        if os.name == "nt" or clothes_motion:
             process.send_signal(signal.SIGINT)
         else:
             os.killpg(process.pid, signal.SIGINT)
-        if single_task:
+        if single_task or clothes_motion:
             return HTTPStatus.ACCEPTED, {
                 "success": True, "message": f"已请求 {task_name} 停止继续下发，轨迹状态待确认",
             }
@@ -621,6 +867,10 @@ def stop_current_task() -> tuple[int, dict]:
 def restore_robot_task(task_id: str) -> tuple[int, dict]:
     """执行机器人复位操作"""
     global current_task_id, current_operation
+    if isinstance(task_id, str) and task_id in CLOTHES_TASKS:
+        return HTTPStatus.CONFLICT, {"success": False, "message": "衣物任务请人工切到预设姿态和导航点"}
+    if model_validation_only():
+        return robot_actions_disabled()
     if not isinstance(task_id, str) or task_id not in TASKS:
         return HTTPStatus.BAD_REQUEST, {"success": False, "message": f"未知任务: {task_id}"}
     if not run_lock.acquire(blocking=False):
@@ -676,15 +926,30 @@ def restore_robot_task(task_id: str) -> tuple[int, dict]:
 def configuration_status(client_ip=None):
     with process_lock:
         task_id, operation = current_task_id, current_operation
+        sofa_grasp_hand = current_sofa_grasp_hand
         motion_unknown = washer_motion_unknown
         active_request = None
-        if (client_ip in ("127.0.0.1", "::1", HOMECARE_ROBOT_HOST)
+        if (client_ip in ("127.0.0.1", "::1", get_robot_host())
                 and current_washer_request is not None and current_process is not None
                 and current_policy_cancel is not None
                 and not current_policy_cancel.is_set()):
             active_request = {"taskId": task_id, "requestId": current_washer_request}
     config = web_config.load()
     capabilities = dict(web_config.CAPABILITIES)
+    clothes_status = {task_id: clothes_readiness(task_id=task_id) for task_id in CLOTHES_TASKS}
+    clothes_models = {key: "ready" if model.ready else "off" for key, model in clothes_policies.items()}
+    model_transition = {"clothes-model-start": "loading", "clothes-model-stop": "closing"}.get(operation)
+    if model_transition is not None:
+        clothes_models[task_id] = model_transition
+    if model_validation_only():
+        return {
+            "success": True, "config": config, "robotActionsEnabled": False, "clothesReadiness": clothes_status,
+            "clothesModels": clothes_models, "sofaModel": clothes_models[SOFA_TASK_ID], "sofaGraspHand": sofa_grasp_hand,
+            "washerMotionUnknown": False, "capabilities": {**capabilities, "human_takeover": False},
+            "locked": run_lock.locked(), "taskId": task_id, "operation": operation,
+            "takeover_readiness": {"ready": False, "blockers": ["当前网页未开放人工接管"]},
+            "episode": None, "recording_error": None, "managedWasher": None,
+        }
     washer_config = single_task_config()
     managed_washer_status = None
     if washer_config and "managedPolicy" in washer_config:
@@ -696,7 +961,7 @@ def configuration_status(client_ip=None):
             managed, status = managed_washer_readiness(washer_config)
             if status == "READY":
                 support = {
-                    "robotHost": HOMECARE_ROBOT_HOST,
+                    "robotHost": get_robot_host(),
                     "taskIds": list(TASK_IDS),
                     "timingBasis": washer_config["managedPolicy"]["timingBasis"],
                     "cancelProtocol": WASHER_CANCEL_PROTOCOL,
@@ -718,7 +983,7 @@ def configuration_status(client_ip=None):
             managed_washer_status["activeRequest"] = active_request
     elif washer_config and not motion_unknown and not config["human_takeover_enabled"]:
         capabilities["washer_single_task_v1"] = {
-            "robotHost": HOMECARE_ROBOT_HOST,
+            "robotHost": get_robot_host(),
             "maxDurationS": washer_config["maxDurationS"],
         }
     runtime = takeover.status()
@@ -729,7 +994,9 @@ def configuration_status(client_ip=None):
             "taskId": episode['taskId'] if active else task_id,
             "operation": 'takeover' if active else operation,
             "takeover_readiness": runtime['readiness'], "episode": episode,"recording_error":runtime.get("recording_error"),
-            "managedWasher": managed_washer_status}
+            "managedWasher": managed_washer_status, "clothesReadiness": clothes_status, "clothesModels": clothes_models,
+            "sofaModel": clothes_models[SOFA_TASK_ID],
+            "sofaGraspHand": sofa_grasp_hand}
 
 
 class IntegratedHandler(BaseHTTPRequestHandler):
@@ -774,10 +1041,16 @@ class IntegratedHandler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.BAD_REQUEST,{'success':False,'message':str(exc)})
             return
         if path == "/api/vr/status":
+            if model_validation_only():
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"success": False, "reason": "模型验证模式"})
+                return
             status, payload = vr_proxy.fetch_status()
             self.send_json(status, payload)
             return
         if path == "/api/episode":
+            if model_validation_only():
+                self.send_json(HTTPStatus.OK, {"success": True, "episode": None})
+                return
             self.send_json(HTTPStatus.OK, takeover.status())
             return
         if path == "/api/config":
@@ -788,6 +1061,14 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/tasks":
             self.send_json(HTTPStatus.OK, {"success": True, "tasks": TASKS})
+            return
+        if path == "/api/clothes/preflight":
+            query = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+            task_id = query.get("taskId", [CLOTHES_TASK_ID])[0]
+            if task_id not in CLOTHES_TASKS:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务标识无效"})
+                return
+            self.send_json(HTTPStatus.OK, {"success": True, "preflight": clothes_readiness(task_id=task_id)})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
 
@@ -814,9 +1095,12 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             status, payload = stop_current_task()
             self.send_json(status, payload)
             return
+        clothes_model_paths = {"/api/clothes/model/start", "/api/clothes/model/stop", "/api/clothes/stop-test"}
+        clothes_gripper_path = "/api/clothes/gripper"
         if path not in {"/api/run-task", "/api/run-washer-task", "/api/cancel-washer-task",
-                        "/api/finish-washer-task", "/api/restore-task", "/api/config",
-                        "/api/episode/command", "/api/episode/review"}:
+                        "/api/finish-washer-task", "/api/restore-task", "/api/config", "/api/gripper",
+                        "/api/episode/command", "/api/episode/review", "/api/run-clothes-robot", "/api/clothes/restore-pose",
+                        clothes_gripper_path, *clothes_model_paths}:
             self.send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
             return
 
@@ -832,6 +1116,58 @@ class IntegratedHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "JSON格式不正确"})
             return
 
+        if path == "/api/gripper":
+            if self.headers.get_content_type() != "application/json":
+                self.send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"success": False, "message": "夹爪操作需要 JSON 请求"})
+            else:
+                self.send_json(*control_gripper(body))
+            return
+
+        if path in clothes_model_paths:
+            task_id = body.get("taskId")
+            if set(body) != {"taskId"} or not isinstance(task_id, str) or task_id not in CLOTHES_TASKS:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务标识无效"})
+            elif path == "/api/clothes/stop-test":
+                status, payload = (stop_current_task(clothes_task=task_id)
+                                   if clothes_motion_allowed(task_id) else robot_actions_disabled())
+                self.send_json(status, payload)
+            else:
+                self.send_json(*set_clothes_model(task_id, start=path == "/api/clothes/model/start"))
+            return
+
+        clothes_control_paths = {"/api/run-clothes-robot", "/api/clothes/restore-pose", clothes_gripper_path}
+        if model_validation_only() and path not in {"/api/run-task", "/api/config", *clothes_control_paths}:
+            status, payload = robot_actions_disabled()
+            self.send_json(status, payload)
+            return
+        if path == clothes_gripper_path:
+            task_id, side, action = body.get("taskId"), body.get("side"), body.get("action")
+            if (set(body) != {"taskId", "side", "action"} or task_id not in {CLOTHES_TASK_ID, HANG_TASK_ID, PUT_WASHER_TASK_ID, CLOSE_WASHER_TASK_ID, MEM_CLOSE_WASHER_TASK_ID}
+                    or side not in {"left", "right"} or action not in {"open", "close"}):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务夹爪操作无效"})
+            else:
+                self.send_json(*control_clothes_gripper(task_id, side, action))
+            return
+        if path in clothes_control_paths:
+            task_id = body.get("taskId")
+            grasp_hand = body.get("graspHand")
+            valid_fields = {"taskId"}
+            if path == "/api/run-clothes-robot" and task_id == SOFA_TASK_ID and grasp_hand in SOFA_GRASP_HANDS:
+                valid_fields.add("graspHand")
+            if set(body) != valid_fields or not isinstance(task_id, str) or task_id not in CLOTHES_TASKS:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": "衣物任务标识无效"})
+            elif not clothes_motion_allowed(task_id):
+                status, payload = robot_actions_disabled()
+                self.send_json(status, payload)
+            else:
+                if path == "/api/clothes/restore-pose":
+                    status, payload = _run_clothes_process(task_id, real_robot=True, restore_pose=True)
+                elif grasp_hand is None:
+                    status, payload = run_clothes_robot_task(task_id)
+                else:
+                    status, payload = run_clothes_robot_task(task_id, grasp_hand=grasp_hand)
+                self.send_json(status, payload)
+            return
         if path in {"/api/episode/command","/api/episode/review"}:
             try:
                 self.send_json(HTTPStatus.OK, takeover.save_review(body) if path.endswith('/review') else takeover.command(body))
@@ -848,8 +1184,19 @@ class IntegratedHandler(BaseHTTPRequestHandler):
                 self.send_json(HTTPStatus.CONFLICT, {"success": False, "message": "任务运行或复位中，配置已锁定"})
                 return
             try:
+                normalized = web_config.normalize(body)
+                changed_robot = normalized["robot_host"] != get_robot_host()
+                uploader = chunk_log._uploader
+                if changed_robot and uploader is not None and uploader.status()["pending_records"]:
+                    raise ValueError("采集数据尚未传完，请传输完成后再修改机器人 IP")
                 config = web_config.save(body)
-                self.send_json(HTTPStatus.OK, {"success": True, "config": config, "message": "配置已保存；运行前会检查226记录目录可写性"})
+                configure_proxy_bypass()
+                if changed_robot and uploader is not None:
+                    uploader.transport = chunk_log.Transport(host=config["robot_host"])
+                    uploader.anchor_value = None
+                    uploader.anchor_at = 0
+                self.send_json(HTTPStatus.OK, {"success": True, "config": config,
+                    "message": f"配置已保存，后续任务使用机器人 {config['robot_host']}"})
             except (OSError, ValueError) as exc:
                 self.send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": f"配置未保存: {exc}"})
             finally:
@@ -909,19 +1256,33 @@ class IntegratedHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def log_message(self, fmt, *args):
-        print(f"[HTTP] {self.address_string()} - {fmt % args}", flush=True)
+        try:
+            print(f"[HTTP] {self.address_string()} - {fmt % args}", flush=True)
+        except BrokenPipeError:
+            pass
 
 
 def main():
-    from chunk_log import shared_uploader
-    shared_uploader()  # recover only file transfers; never resume a robot task
+    if not model_validation_only():
+        from chunk_log import shared_uploader
+        shared_uploader()  # recover only file transfers; never resume a robot task
     print("=" * 60)
     print("Agibot 综合任务测试服务")
     print("=" * 60)
     print(f"测试页面: http://localhost:{PORT}/intergrated_test.html")
     print("按 Ctrl+C 停止服务")
     print("=" * 60)
-    ThreadingHTTPServer((HOST, PORT), IntegratedHandler).serve_forever()
+    def exit_server(_signum, _frame):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, exit_server)
+    try:
+        with ThreadingHTTPServer((HOST, PORT), IntegratedHandler) as server:
+            server.serve_forever()
+    finally:
+        with run_lock:
+            for model in clothes_policies.values():
+                model.close()
 
 
 if __name__ == "__main__":

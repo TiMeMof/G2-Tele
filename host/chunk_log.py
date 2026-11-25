@@ -32,7 +32,10 @@ def atomic(path,raw):
 
 class Transport:
     def __init__(self,host=None,port=None,token_file=None):
-        self.host,self.port=host or get_robot_host(),port or load()["collection_port"];self.token_file=Path(token_file or BASE/'session_receiver.token')
+        self._host,self.port=host,port or load()["collection_port"];self.token_file=Path(token_file or BASE/'session_receiver.token')
+    @property
+    def host(self):
+        return self._host or get_robot_host()
     def request(self,method,path,body=None):
         timeout=1 if path=="/api/health" else 3 if method=="GET" and path.startswith("/api/records?") else 20
         conn=http.client.HTTPConnection(self.host,self.port,timeout=timeout)
@@ -61,7 +64,7 @@ class Transport:
 
 class Uploader:
     def __init__(self,spool=None,transport=None):
-        self.root=Path(spool or BASE/'pending_spool');self.transport=transport or Transport()
+        self.root=Path(spool or BASE/'pending_spool');self.transport=transport or Transport(host=get_robot_host())
         self.queue=queue.Queue();self.lock=threading.Lock();self.pending=set();self.stop=threading.Event();self.thread=None
         self.last_error=None;self.anchor_value=None;self.anchor_at=0
     def start(self):

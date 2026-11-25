@@ -192,7 +192,7 @@ class DrawerControl:
     def calculate_arm_displacement(self, current_joints: np.ndarray, initial_joints: np.ndarray) -> float:
         """
         计算机械臂末端位移（简化计算）
-
+        
         实际应用中应使用正运动学计算末端位置
         这里使用关节角度变化的加权和作为近似
         前三个关节对末端位置影响较大，给予更高权重
@@ -429,7 +429,7 @@ def main() -> None:
     # 执行任务
     drawer_control = DrawerControl(task_spec)
     success = drawer_control.run()
-
+    
     sys.exit(0 if success else 1)
 
 

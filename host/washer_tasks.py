@@ -9,11 +9,11 @@ import sys
 PROJECT_DIR = Path(__file__).resolve().parents[3]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
-from network_config import get_policy_host, configure_proxy_bypass
+from network_config import get_policy_host, get_robot_host, configure_proxy_bypass
 
 OPEN_WASHER_TASK = '右臂开洗衣机门'
 TASK_IDS = ('双臂关洗衣机门', '左臂放浅蓝色衣服进洗衣机', OPEN_WASHER_TASK, '左臂从洗衣机拿衣服')
-HOMECARE_ROBOT_HOST = '192.168.50.118'
+HOMECARE_ROBOT_HOST = get_robot_host()
 MOTION_UNKNOWN_EXIT = 2
 OPERATOR_FINISHED_EXIT = 3
 OPERATOR_FINISH_BYTE = b"F"

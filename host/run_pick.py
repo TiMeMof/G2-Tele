@@ -96,7 +96,7 @@ class TaskConfigLoader:
         for path in self.config_paths:
             with path.open("r", encoding="utf-8") as handle:
                 self._configs.append((path, json.load(handle)))
-
+    
     # 列出所有可用的任务名称
     def list_available_tasks(self) -> list[str]:
         tasks = []
@@ -149,7 +149,7 @@ class ControlConfig:
     max_step: int = 150            # 最大执行步数
     try_num: int = 3               # 最大尝试次数
     arm_type: str = "left_arm"    # 机械臂类型
-    fail_thehold: float = -0.0008    # 夹取失败阈值 -0.05  -0.0008    -0.01
+    fail_thehold: float = -0.0008    # 夹取失败阈值 -0.05  -0.0008    -0.01 
     success_thehold: float = -0.001  # 夹取成功阈值  -0.1   -0.001    -0.06
     ref_time: float = 1.0          # 轨迹参考时间（单位：秒），值越大动作执行越慢
     retry_ref_time: float = 0.2    # 重试时使用的轨迹参考时间（通常比正常推理更短以快速复位）
@@ -229,7 +229,7 @@ class SyncControl:
                         f"(范围 [{lower[j]:.4f}, {upper[j]:.4f}])，已裁剪到边界"
                     )
         return np.clip(arm_actions, lower, upper)
-
+    
     # 推理
     def inf_loop(self):
         try_num = 0

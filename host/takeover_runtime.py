@@ -3,6 +3,7 @@ import threading
 import time
 from pathlib import Path
 from chunk_log import Recorder, shared_uploader
+from network_config import get_robot_host
 from washer_adapter import WasherAdapter
 from washer_tasks import TASK_IDS, policy_for, resolve_running_policy, get_policy_host
 from episode_control import Episode, Worker, Conflict, FAILURE_REASONS, TERMINAL, VR_FRESH_MS, VR_UNKNOWN_POLICY
@@ -35,6 +36,7 @@ def readiness():
     ready=(configured and health.get('ready') is True and health.get('robot_ready') is True
            and vr.get('fresh') is True and vr.get('takeover') is False)
     return {'ready': ready, 'robot_collection':health, 'state_machine_tested': True,
+            'episode_cancel': True, 'robot_host': get_robot_host(),
             'pause_policy': 'suppress_future_sends_only', 'vr_unknown_policy':VR_UNKNOWN_POLICY, 'physical_handover_verified': False,
             'persistent_recording_ready': configured, 'feedback_collection': 'robot_unified_session',
             'blockers': [] if ready else [health.get('message') or ('请先连接VR并松开接管键' if health.get('ready') else '机器人统一采集服务尚未就绪')],
@@ -74,15 +76,20 @@ class Runtime:
         self.monitor_thread = None
         self.writer_thread = None
 
+    def _worker_active(self):
+        return self.worker_thread is not None and self.worker_thread.is_alive()
+
     def active(self):
         with self.lock:
             return self.episode is not None and (self.episode.phase not in TERMINAL or
-                (self.episode.review_started_s is not None and not self.episode.review_saved))
+                (self.episode.review_started_s is not None and not self.episode.review_saved) or
+                (bool(self.episode.result and self.episode.result.get('cancelled')) and self._worker_active()))
 
     def status(self):
         with self.lock:
             snapshot=self.episode.snapshot() if self.episode else None
             if snapshot is not None:
+                snapshot['worker_active'] = self._worker_active()
                 snapshot['review_ready']=self.review_ready()
             return {'success': True, 'readiness': self.readiness_check(),
                     'episode': snapshot, 'recording_error':self.recording_error}
@@ -186,6 +193,15 @@ class Runtime:
         finally:
             # A runtime exception remains available for manual result classification.
             # Monitoring must remain alive until that classification is complete.
+            with episode.lock:
+                cancelled=bool(episode.result and episode.result.get('cancelled'))
+            if cancelled:
+                model_stopped=False
+                if adapter is not None:
+                    try:model_stopped=adapter.close_cancelled_model() is True
+                    except Exception:pass
+                with episode.lock:
+                    episode.result['model_stopped']=model_stopped
             if adapter is not None:
                 try:adapter.close()
                 except Exception:pass
@@ -215,6 +231,11 @@ class Runtime:
             with self.episode.lock:
                 result = self.episode.command(body.get('command'),body.get('episodeId'),body.get('revision'),
                                               body.get('requestId'),body.get('reasons'),body.get('note',''))
+                result['worker_active'] = self._worker_active()
+                if body.get('command') == 'cancel':
+                    # The worker finalizes the recording after cancellation.
+                    self.stop.set()
+                    return {'success': True, 'episode': result}
                 try:
                     if self.episode.recording:
                         if body.get('command') in {'success','failure','reset'}:

@@ -1,0 +1,428 @@
+{
+  "source_host": "192.168.50.113",
+  "captured_at_utc": "2026-11-25T03:02:11Z",
+  "files": [
+    {
+      "repo_path": "host/ASYNC_EXECUTION_ANALYSIS.md",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/ASYNC_EXECUTION_ANALYSIS.md",
+      "bytes": 8848,
+      "sha256": "4578ac95dc2944751403cbf25fd78c1b3855da1594d708976463aeb71a8f32be"
+    },
+    {
+      "repo_path": "host/README.md",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/README.md",
+      "bytes": 9421,
+      "sha256": "73f8e97ddecfe3b0ddc2bcab4c80ebb05382a4ccd2a474898f72332868a1e4cb"
+    },
+    {
+      "repo_path": "host/RTC_IMPLEMENTATION_GUIDE.md",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/RTC_IMPLEMENTATION_GUIDE.md",
+      "bytes": 10310,
+      "sha256": "c6377e58c47e487c9b962fac95c8b9742efb6b0ed9b170e87c87a3b9acffe604"
+    },
+    {
+      "repo_path": "host/chunk_log.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/chunk_log.py",
+      "bytes": 9258,
+      "sha256": "7fe8213656fe0622145d4ff25c3703d412e94710b679febf713194ea321397ca"
+    },
+    {
+      "repo_path": "host/clothes_robot.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/clothes_robot.py",
+      "bytes": 20809,
+      "sha256": "610023c95e44870f53b1985b70c4c2430222b033a3b0771584716343cf0d9719"
+    },
+    {
+      "repo_path": "host/clothes_task.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/clothes_task.py",
+      "bytes": 11901,
+      "sha256": "5b54dbbac2e40fa23bb45a9a9a9f25a6631f91b76ca9a4ce93c5d8b7ecaf3cb1"
+    },
+    {
+      "repo_path": "host/data_browser.css",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/data_browser.css",
+      "bytes": 7343,
+      "sha256": "842c8504af6d1684f8334af671cfbab056c70aa54c7ebc683dcbab3c7ca967c0"
+    },
+    {
+      "repo_path": "host/data_browser.js",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/data_browser.js",
+      "bytes": 24463,
+      "sha256": "04e8100e9b3e341c62774d582ea2e0947f781d7dc9fa16973e1a93ecc788124c"
+    },
+    {
+      "repo_path": "host/episode_control.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/episode_control.py",
+      "bytes": 22702,
+      "sha256": "08cd87575190780476c4c66cf2196235e40f823e47f38421fc22129af8ade2c7"
+    },
+    {
+      "repo_path": "host/episode_review.js",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/episode_review.js",
+      "bytes": 9164,
+      "sha256": "22c7a9bdacdf60b7d7a8a947621004e889ed5253b172e6858d639e89e7e137a4"
+    },
+    {
+      "repo_path": "host/episode_review.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/episode_review.py",
+      "bytes": 4270,
+      "sha256": "d7ce25fc2abe21ce934b016a68c766a9b4e55f1d46b22930eb38b9db0a2eb7c8"
+    },
+    {
+      "repo_path": "host/homecare_washer_execution.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/homecare_washer_execution.py",
+      "bytes": 3170,
+      "sha256": "85425e6857fdc290d53da48eb28f6d8bc2c0e16b82a16d9aca31f69f221d37e3"
+    },
+    {
+      "repo_path": "host/intergrated_test.html",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/intergrated_test.html",
+      "bytes": 79065,
+      "sha256": "842e5a241403ecef45c739789190f7f8a3e0774e4554287994ac4e9c08b805f7"
+    },
+    {
+      "repo_path": "host/intergrated_test_server.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/intergrated_test_server.py",
+      "bytes": 63577,
+      "sha256": "3571a171585a30904e362826f8fd724cadcc940052fa606180d709137f47cc87"
+    },
+    {
+      "repo_path": "host/joint_limits.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/joint_limits.py",
+      "bytes": 4259,
+      "sha256": "7dd0879391a4cf5c8abd8edb332dbb7dd3e41ea907bcffc3de0b49d00dc3691c",
+      "git_normalized_sha256": "7561752c98eaa05f5148c310dc2e8499f5d3d662c31fecf153e7780ec3d9f83a"
+    },
+    {
+      "repo_path": "host/network_config.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/network_config.py",
+      "bytes": 1193,
+      "sha256": "8ea76fa69c234b957fae45b9149be8eed2174af38cfd607da90d55a7484c0d69"
+    },
+    {
+      "repo_path": "host/record_browser.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/record_browser.py",
+      "bytes": 16294,
+      "sha256": "04c5cb25eddb4589532762cf5642121ae26b616a477e8e7421dbf5e8c233af72"
+    },
+    {
+      "repo_path": "host/remote_records.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/remote_records.py",
+      "bytes": 2717,
+      "sha256": "396bfb2c1af1ed49f063b7e25d3c80cb3b5dbe5caba1e41f1eaaed8c1e1cfe93"
+    },
+    {
+      "repo_path": "host/restore.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/restore.py",
+      "bytes": 4533,
+      "sha256": "8a43f9323a1fb9e10c37d3c065c0982b7f2491143a7c8a435b2d15f692f6bd04"
+    },
+    {
+      "repo_path": "host/run_clothes.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_clothes.py",
+      "bytes": 1113,
+      "sha256": "3c7597a41f3a807d8ec90eddbb4e751cb86410516b7792cf273d33b70840f5ca"
+    },
+    {
+      "repo_path": "host/run_clothes_robot.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_clothes_robot.py",
+      "bytes": 2357,
+      "sha256": "9f8f031c9a76622b4e42c8e77a1bb1e5d3919a7cda5a0c1c7f22fccea98997ba"
+    },
+    {
+      "repo_path": "host/run_drawer.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_drawer.py",
+      "bytes": 18184,
+      "sha256": "896866c002cd89882d7fbf8eb2dfc04b0926ccdc52d09c0dd195bb3606310586"
+    },
+    {
+      "repo_path": "host/run_pick.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_pick.py",
+      "bytes": 17669,
+      "sha256": "22ef41a896fe8e3652ffcace6529aee7f676212f5320a411f331b453abb681bb"
+    },
+    {
+      "repo_path": "host/run_pick_async.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_pick_async.py",
+      "bytes": 17707,
+      "sha256": "a052c3fa701844eecc42dbd6dd6c5ec6f980abf2af13497e5d3bb9a7c799e351"
+    },
+    {
+      "repo_path": "host/run_pick_rtc.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_pick_rtc.py",
+      "bytes": 31558,
+      "sha256": "d2c2c8083a596e46ff3868bc3b93766aeca512f2946dc21f744e938c0f597d9a"
+    },
+    {
+      "repo_path": "host/run_pick_synchronized.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_pick_synchronized.py",
+      "bytes": 17587,
+      "sha256": "81fb60db8f370b81e1b2e96f7d0f9e9a703aa013457bcdd7dfe75396f66c3073"
+    },
+    {
+      "repo_path": "host/run_pick_timing.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_pick_timing.py",
+      "bytes": 37223,
+      "sha256": "acdb02ec547d05147bb3a2ff317aeb75580881b54b94776937ea5ea57e8bb973"
+    },
+    {
+      "repo_path": "host/run_place.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_place.py",
+      "bytes": 11182,
+      "sha256": "72f13e9a100efaf4e236dccd63dc8053b9be4d3cd461993c42e98feab216282b"
+    },
+    {
+      "repo_path": "host/run_place_masked.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_place_masked.py",
+      "bytes": 52363,
+      "sha256": "b81ef4b693650b92fa48186f68e18084a3528b5a1636215dd062824d7da285c4"
+    },
+    {
+      "repo_path": "host/run_washer.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_washer.py",
+      "bytes": 18898,
+      "sha256": "067559867a33b09d210ebe72cf4bb4667a17f883a9e4e4f3647a2f65b3f1489c"
+    },
+    {
+      "repo_path": "host/run_water.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/run_water.py",
+      "bytes": 16498,
+      "sha256": "1980bb25124be46a8d40f994b32353ae723e82517e91c1521055519ce650cf29"
+    },
+    {
+      "repo_path": "host/start_server.sh",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/start_server.sh",
+      "bytes": 1361,
+      "sha256": "f912150a79b6ccd80979f354ed6f1a8f8020eb3f02393aa49595e3bd3ad32f17"
+    },
+    {
+      "repo_path": "host/takeover_runtime.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/takeover_runtime.py",
+      "bytes": 13056,
+      "sha256": "dd1c8a012bcbb915f8e382c67dd4420e30f5803a465459ee2f1fe5f45f015c81"
+    },
+    {
+      "repo_path": "host/temporal_washer.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/temporal_washer.py",
+      "bytes": 3785,
+      "sha256": "b5b0a1a82d13d0170d84fc6deb43b8f213d956b03951ea6a3f56b73021fd4627"
+    },
+    {
+      "repo_path": "host/test_a1.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/test_a1.py",
+      "bytes": 27899,
+      "sha256": "9bb22ae8f8274232754c8bc6952e123d167897f79e9153f61472d57bfaf53a19"
+    },
+    {
+      "repo_path": "host/test_clothes_robot.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/test_clothes_robot.py",
+      "bytes": 30636,
+      "sha256": "243b1605005fc1f4a8cc06a26de14f951ce0b9c2067594823aa31d696518ebd2"
+    },
+    {
+      "repo_path": "host/test_clothes_task.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/test_clothes_task.py",
+      "bytes": 5303,
+      "sha256": "d4ed0859e4a7d9fe52819f729c46c394b596fa47d6944598a17e754e9a564ddf"
+    },
+    {
+      "repo_path": "host/test_temporal_washer.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/test_temporal_washer.py",
+      "bytes": 3065,
+      "sha256": "b379666da92d99b4c07ff927b63e293269a49a07aec9c1d0bed852997732914c"
+    },
+    {
+      "repo_path": "host/vr_proxy.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/vr_proxy.py",
+      "bytes": 3158,
+      "sha256": "061a6f9305de44c502ac34c5bac71ce10d0dc22dd27398a4038366f92447452b"
+    },
+    {
+      "repo_path": "host/washer_adapter.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/washer_adapter.py",
+      "bytes": 12868,
+      "sha256": "819525d8d24f60ca7c8927ac678b20ce33ade12350ace2c370a2d825d6a88418"
+    },
+    {
+      "repo_path": "host/washer_model_cleanup.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/washer_model_cleanup.py",
+      "bytes": 8812,
+      "sha256": "6decfc5aca968e733706e28612abeb831a6a1775ac747fc51171a7b16829138d"
+    },
+    {
+      "repo_path": "host/washer_tasks.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/washer_tasks.py",
+      "bytes": 7522,
+      "sha256": "22cd038552caf6d5b68b836a2efada148cd9e14324aa026a061ba4a0b9d209c9"
+    },
+    {
+      "repo_path": "host/web_config.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/web_config.py",
+      "bytes": 2616,
+      "sha256": "2f044d8a9bd6614a53bfad1ccf545dc5db36600e1b0774beaf88d3c37692ee59"
+    },
+    {
+      "repo_path": "host/web_restart.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/web_restart.py",
+      "bytes": 10342,
+      "sha256": "31516619fce91b7c977aaed41221b235d9ac17d484dd1327407131658a9eaa01"
+    },
+    {
+      "repo_path": "host/mask_preview_left/cam_head_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_left/cam_head_mask.png",
+      "bytes": 1151,
+      "sha256": "06ffa819ab4700ca03a48de735b4c77a7b3785ae7632b907b70bde1689007aaa"
+    },
+    {
+      "repo_path": "host/mask_preview_left/cam_left_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_left/cam_left_mask.png",
+      "bytes": 5106,
+      "sha256": "da5f31601e8faed8e2836bce2cc5c7a6da7e23f7c777a54b410e409172bd2d0a"
+    },
+    {
+      "repo_path": "host/mask_preview_left/cam_right_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_left/cam_right_mask.png",
+      "bytes": 3113,
+      "sha256": "c54f55496de88c90325ab73bffa3f68ba1806777d2f39cdf78e7632be663f157"
+    },
+    {
+      "repo_path": "host/mask_preview_right/cam_head_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_right/cam_head_mask.png",
+      "bytes": 1251,
+      "sha256": "c0d8eeeb98621c73b357b0ab2f375ea260f8ec0177411c42449793cc6cecf802"
+    },
+    {
+      "repo_path": "host/mask_preview_right/cam_left_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_right/cam_left_mask.png",
+      "bytes": 3113,
+      "sha256": "c54f55496de88c90325ab73bffa3f68ba1806777d2f39cdf78e7632be663f157"
+    },
+    {
+      "repo_path": "host/mask_preview_right/cam_right_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview_right/cam_right_mask.png",
+      "bytes": 6197,
+      "sha256": "f782a1785348f7e5c18bc837f97a4d88a0adc6488ba5db57397665a50526b0a1"
+    },
+    {
+      "repo_path": "host/mask_preview/cam_head_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview/cam_head_mask.png",
+      "bytes": 1186,
+      "sha256": "74436c672803202d2518d037ad19f8c31ebf4a4d64ce0380e3b9c976220c8b4b"
+    },
+    {
+      "repo_path": "host/mask_preview/cam_left_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview/cam_left_mask.png",
+      "bytes": 3113,
+      "sha256": "c54f55496de88c90325ab73bffa3f68ba1806777d2f39cdf78e7632be663f157"
+    },
+    {
+      "repo_path": "host/mask_preview/cam_right_mask.png",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/mask_preview/cam_right_mask.png",
+      "bytes": 5275,
+      "sha256": "d57801da15a6b99bb9b0bc3a2c29bbf37d5c9678afe5ad5f28cd994cfd700d64"
+    },
+    {
+      "repo_path": "host/network.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/network.json",
+      "bytes": 154,
+      "sha256": "3bfe64792852dd66f26c4d0c4995993afc97d398ef1f6e9d81b01e8e823787d0"
+    },
+    {
+      "repo_path": "host/joint_limits.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/intergrated_test/joint_limits.json",
+      "bytes": 4382,
+      "sha256": "e70bd658d97b7e9439ae15524e0f68a4868ead6663b7da03783b33bdd1dae189",
+      "git_normalized_sha256": "f4a69c0821c688198df093af80217c006fdb903cb958166cf57cb51e0f6ea4c6"
+    },
+    {
+      "repo_path": "config/config_V2_0.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/config_V2_0.json",
+      "bytes": 81209,
+      "sha256": "374291535b4e19a52b72cc2750ca90e763bef2e3c79de36bb8a897faab2901c1"
+    },
+    {
+      "repo_path": "config/robot_config_ori.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/robot_config_ori.json",
+      "bytes": 342,
+      "sha256": "42fae08714e48917aad64fce75ed749c87a9b5c4d2521398080f4ab788c58e2f"
+    },
+    {
+      "repo_path": "robot_target.py",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/robot_target.py",
+      "bytes": 1462,
+      "sha256": "c74aac67cb94a5ed56606ab2596d252aaa975f9f8bb8ac4f5c400aeb64c12e9c"
+    },
+    {
+      "repo_path": "config/right_add_drawer_config.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/right_add_drawer_config.json",
+      "bytes": 16216,
+      "sha256": "86b270b4c2a029f5ff6513da99a29ab205d2a22b5475e37a9cf21147458f470c"
+    },
+    {
+      "repo_path": "config/left_add_drawer_config.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/left_add_drawer_config.json",
+      "bytes": 17118,
+      "sha256": "242a0e80320d80996a5ae80d893bec2b3b842a7c4d678cc48814e935c59f440e"
+    },
+    {
+      "repo_path": "config/task_right_config.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/task_right_config.json",
+      "bytes": 3923,
+      "sha256": "c7c0c3f25943c38538f9c42f871a384965db6e4a440757809aaa17ecf524ef43"
+    },
+    {
+      "repo_path": "config/left_config_new.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/left_config_new.json",
+      "bytes": 14002,
+      "sha256": "eeed95fe5bf7454d9be2fe5de3d1f7c42a8243fc51f328a5e837326bfe15e08d"
+    },
+    {
+      "repo_path": "config/task_left_config.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/task_left_config.json",
+      "bytes": 6039,
+      "sha256": "4a8dd22408c4e95b626337071f25711af21928194d2e2f560325c9c49fb3112e"
+    },
+    {
+      "repo_path": "config/robot_config.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/robot_config.json",
+      "bytes": 206,
+      "sha256": "903f6627b2c5bc0298e3bb06998c53e6d55be8fe1ca823c185167e1b4da2a79c"
+    },
+    {
+      "repo_path": "config/right_config_new.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/right_config_new.json",
+      "bytes": 13648,
+      "sha256": "4ee1d4dff5f11efde4c74a35e86d2456778ccdc93e183963d8658f049ce71970"
+    },
+    {
+      "repo_path": "config/clothes_robot_setup.json",
+      "remote_path": "/home/lindenbot/qianzhang43/agibot_policy_ctl/g2_policy_ctl/config/clothes_robot_setup.json",
+      "bytes": 5569,
+      "sha256": "2369d3c45444c06189f55ee42063e2c52cb7054fb4e2938e940e66fe3e973a80"
+    }
+  ],
+  "local_previous_commit": "affbfd29759460d3caac77e05154add205073380",
+  "verification": {
+    "checked": 66,
+    "mismatches": []
+  },
+  "sync_date": "2026-11-25",
+  "robot": {
+    "web_selected_host": "192.168.50.223",
+    "ssh": "connected_using_trusted_192.168.50.61_host_key",
+    "known_deployment_directories_found": false,
+    "collection_ports_8086_8087_listening": false,
+    "previous_host_192.168.50.118": "unreachable_from_local_and_113",
+    "local_robot_source_updated": false,
+    "retained_source_commit": "affbfd29759460d3caac77e05154add205073380"
+  },
+  "scope": "Deployed integrated-test application source, static assets, task configs and robot_target.py. External models, SDKs, core packages, tokens and recorded data are excluded.",
+  "validation": {
+    "remote_files_rechecked": 66,
+    "remote_hash_mismatches": 0,
+    "python_syntax_files": 55,
+    "javascript_syntax": "passed",
+    "unit_tests": "not_run_execution_request_rejected",
+    "remote_source_whitespace": "preserved_verbatim"
+  }
+}

@@ -3046,8 +3046,8 @@
     "asset_id": "washer_open_the_gate_0924"
   },
   "双臂关洗衣机门": {
-    "policy_config": "linden_lingao",
-    "prompt": "Use both arms to close the washing machine door, push it with the left arm while the right arm assists, until the door is closed, and avoid disturbing nearby objects.",
+    "policy_config": "linden_washer_close_event_weighted_20261121",
+    "prompt": "Use both arms to close the washing machine door.",
     "init_position": [
       {
         "arm": [
@@ -3121,14 +3121,30 @@
       }
     ],
     "position_source": "init_position 的 head/arm/waist 使用用户于2026-09-21提供的 get_current_position.py 读数；gripper 和 end_position 保留原饮水机临时配置",
-    "policy_host": "192.168.50.113",
-    "policy_port": 8119,
-    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/yfmo_washer_close_the_gate_17.5k_0922",
-    "asset_id": "washer_close_the_gate_0920"
+    "policy_host": "127.0.0.1",
+    "policy_port": 8189,
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_close_washer_door/s27500_1123_event",
+    "asset_id": "s27500_1123_event_wighted",
+    "robot_execution_enabled": true,
+    "arm_type": "both_arms",
+    "temporal_memory": true,
+    "run_until_stopped": true
+  },
+  "双臂关洗衣机门（历史帧MEM）": {
+    "policy_config": "linden_washer_close_mem_20261121",
+    "prompt": "Use both arms to close the washing machine door.",
+    "arm_type": "both_arms",
+    "policy_host": "127.0.0.1",
+    "policy_port": 8190,
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_close_washer_door/s30000_1123_mem",
+    "asset_id": "washer_close_261115_261116_872_20261118",
+    "robot_execution_enabled": true,
+    "temporal_memory": true,
+    "run_until_stopped": true
   },
   "左臂放浅蓝色衣服进洗衣机": {
-    "policy_config": "linden_lingao",
-    "prompt": "Use the left arm to put the light blue clothes into the washing machine, grasp them securely, place them inside the drum, and avoid disturbing nearby objects.",
+    "policy_config": "linden_clothes_put_washer_20261122",
+    "prompt": "Use the left arm to put the light blue clothes into the washing machine",
     "init_position": [
       {
         "arm": [
@@ -3202,10 +3218,13 @@
       }
     ],
     "position_source": "init_position head/arm/waist: user-provided get_current_position.py readings 2026-09-22; gripper and end_position unchanged.",
-    "policy_host": "192.168.50.113",
-    "policy_port": 8182,
-    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/yfmo_washer_put_light_blue_clothes_55k_0922",
-    "asset_id": "washer_put_light_blue_0918"
+    "policy_host": "127.0.0.1",
+    "policy_port": 8188,
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_put_in_washer/s32500_1122",
+    "asset_id": "s32500_1120_put_in_washer",
+    "robot_execution_enabled": true,
+    "arm_type": "both_arms",
+    "run_until_stopped": true
   },
   "左臂从洗衣机拿衣服": {
     "prompt": "Use the left arm to take the clothes out of the washing machine, grasp them securely, lift them out of the drum, and avoid disturbing nearby objects.",
@@ -3287,5 +3306,36 @@
     "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/yfmo_washer_take_out_the_clothes_30k_0923",
     "asset_id": "washer_take_out_the_clothes_0921",
     "policy_config": "linden_lingao"
+  },
+  "right_arm_hang_clothes": {
+    "prompt": "Use the right arm to hang the clothes on the clothes rack using the hanger.",
+    "robot_execution_enabled": true,
+    "arm_type": "both_arms",
+    "policy_host": "127.0.0.1",
+    "policy_port": 8186,
+    "policy_config": "linden_clothes_hang_20261108",
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_hang_on_cloth/s90000_date1118",
+    "asset_id": "hang_on_cloth_90000_261118"
+  },
+  "left_arm_pick_blue_clothes_from_sofa": {
+    "prompt": "Use both arms to pick up the light blue clothes from the sofa.",
+    "left_grasp_prompt": "Use the left arm to pick up the light blue clothes from the sofa.",
+    "robot_execution_enabled": true,
+    "arm_type": "both_arms",
+    "policy_host": "127.0.0.1",
+    "policy_port": 8187,
+    "policy_config": "linden_clothes_sofa_20261116",
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_sofa_pick_up_blue_cloth/s30000_data1118",
+    "asset_id": "sofa_pick_up_close_20261118"
+  },
+  "right_arm_take_off_clothes": {
+    "prompt": "Use the right arm to remove  the clothes and hanger from the clothes rack.",
+    "robot_execution_enabled": true,
+    "arm_type": "both_arms",
+    "policy_host": "127.0.0.1",
+    "policy_port": 8185,
+    "policy_config": "linden_clothes_takeoff_20261108",
+    "checkpoint": "/home/lindenbot/qianzhang43/checkpoints/xinnie_take_off_cloth/s80000_date117",
+    "asset_id": "clothes_takeoff_20261108"
   }
 }
